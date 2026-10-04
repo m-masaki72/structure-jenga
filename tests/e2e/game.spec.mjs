@@ -126,7 +126,8 @@ test('keyboard probes and removes a member', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.structureStudy.snapshot().removed.length)).toBe(1);
 });
 
-test('architecture and audio preferences survive reload', async ({ page }, testInfo) => {
+test('architecture and audio preferences survive a fresh page', async ({ page, context }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
   await openGame(page);
   await page.locator('#sound-toggle').click();
   await page.locator('#settings-open').click();
@@ -134,11 +135,10 @@ test('architecture and audio preferences survive reload', async ({ page }, testI
   await page.locator('[data-level="cube"]').click();
   await page.locator('#setup-apply').click();
   await expect.poll(() => page.evaluate(() => window.structureStudy.snapshot().level)).toBe('cube');
-  await page.screenshot({ path: testInfo.outputPath('architecture.png'), fullPage: true });
-  await page.reload();
-  await expect
-    .poll(() => page.evaluate(() => window.structureStudy?.snapshot().ready), { timeout: 30000 })
-    .toBe(true);
-  expect(await page.evaluate(() => window.structureStudy.snapshot().level)).toBe('cube');
-  await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.close();
+  const reopened = await context.newPage();
+  await reopened.setViewportSize({ width: 800, height: 600 });
+  await openGame(reopened);
+  expect(await reopened.evaluate(() => window.structureStudy.snapshot().level)).toBe('cube');
+  await expect(reopened.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
 });
