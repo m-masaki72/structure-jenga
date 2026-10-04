@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f2e9" />
+
+    <title>LESS, STILL. — 構造分解</title>
+
+    <link rel="stylesheet" href="./styles/game.css" />
+    <script type="importmap">
+      { "imports": { "three": "./vendor/three.module.js" } }
+    </script>
+    <meta
+      name="description"
+      content="部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。石と木のつながりや重さのかかり方を楽しめます。"
+    />
+    <link rel="canonical" href="https://m-masaki72.github.io/structure-jenga/" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="./favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <link rel="stylesheet" href="./styles/site.css" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LESS, STILL." />
+    <meta property="og:title" content="LESS, STILL. — 構造分解" />
+    <meta
+      property="og:description"
+      content="部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。石と木のつながりや重さのかかり方を楽しめます。"
+    />
+    <meta property="og:url" content="https://m-masaki72.github.io/structure-jenga/" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta property="og:image" content="https://m-masaki72.github.io/structure-jenga/images/ogp.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="構造を抜いて残すパズルのイメージ" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://m-masaki72.github.io/structure-jenga/images/ogp.jpg" />
+    <meta name="twitter:image:alt" content="構造を抜いて残すパズルのイメージ" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "LESS, STILL. — 構造分解",
+        "description": "部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。石と木のつながりや重さのかかり方を楽しめます。",
+        "url": "https://m-masaki72.github.io/structure-jenga/",
+        "inLanguage": "ja",
+        "image": "https://m-masaki72.github.io/structure-jenga/images/ogp.jpg",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Web browser",
+        "gamePlatform": "Web browser",
+        "isAccessibleForFree": true,
+        "license": "https://github.com/m-masaki72/structure-jenga/blob/main/LICENSE"
+      }
+    </script>
+  </head>
+  <body>
+    <header class="site-header" inert>
+      <a class="brand" href="./index.html" aria-label="構造分解 LESS, STILL."
+        ><svg viewBox="0 0 36 36" aria-hidden="true">
+          <path d="M5 29L18 5L31 29ZM11.5 17H24.5M5 29L24.5 17" /></svg
+        ><span>LESS, STILL.</span></a
+      >
+      <nav aria-label="ゲームの設定">
+        <button id="finish" class="finish-button" hidden disabled>
+          ここで完成 <span aria-hidden="true">✓</span>
+        </button>
+        <button
+          id="sound-toggle"
+          class="icon-button"
+          aria-label="音のオン・オフ"
+          aria-pressed="true"
+          title="音のオン・オフ"
+        >
+          ♪
+        </button>
+        <button id="help-open" class="icon-button" aria-label="遊び方" title="遊び方">?</button>
+        <button
+          id="settings-open"
+          class="architecture-button"
+          aria-label="アーキテクチャを選ぶ"
+          aria-haspopup="dialog"
+          aria-controls="settings-dialog"
+        >
+          アーキテクチャを選ぶ
+        </button>
+      </nav>
+    </header>
+    <main inert>
+      <section class="workspace" aria-label="構造分解">
+        <div
+          id="structure-viewport"
+          tabindex="0"
+          role="application"
+          aria-label="構造パズル。部材をクリックで選んで音を聴く。ドラッグで回転。矢印キーで部材を選択、スペースで聴く、Xで抜く。"
+        ></div>
+        <div id="collapse-vignette" aria-hidden="true"></div>
+        <p id="collapse-caption" role="status" hidden></p>
+        <div id="loading" role="status">構造を組み立てています…</div>
+        <div class="stage-title">
+          <button id="structure-open" aria-label="作品と条件を変更">
+            <span id="stage-name">はじめの四面体</span><span class="chevron" aria-hidden="true">⌄</span>
+          </button>
+          <p>
+            <span id="stage-number">01 / 20</span><span class="live-dot"></span
+            ><span id="session-label">自重と、かすかな揺れ</span>
+          </p>
+        </div>
+        <button
+          id="records-open"
+          class="score-summary"
+          aria-label="スコアと詳しい記録を見る"
+          title="詳しい記録"
+        >
+          <span class="score-line"
+            ><span class="count-progress"
+              ><strong id="removed-count">0</strong
+              ><small class="count-target">/ <span id="target-count">3</span> 本</small></span
+            ><span class="score-value"><strong id="score">0</strong><small>pt</small></span></span
+          >
+          <span
+            class="target-track"
+            id="target-meter"
+            role="progressbar"
+            aria-label="抜く本数の目標"
+            aria-valuemin="0"
+            aria-valuemax="3"
+            aria-valuenow="0"
+            ><span id="target-bar"></span
+          ></span>
+        </button>
+        <div class="stage-bottom">
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+          <p id="stage-hint" class="stage-hint">柱も梁も、一本ずつ抜ける。</p>
+          <p id="piece-guide" class="piece-guide">石と木をタップ · 土台は固定</p>
+          <section id="selection-dock" class="selection-dock" aria-label="選んだ部材の操作" hidden>
+            <div class="selected-piece">
+              <span class="selected-label"
+                ><span id="selected-kind"></span><span id="selected-name"></span
+              ></span>
+              <button id="cycle-member" class="candidate-picker" title="近くの別の部材を選ぶ" hidden>
+                <span aria-hidden="true">↻</span><span id="candidate-position"></span>
+              </button>
+              <canvas id="sound-wave" width="160" height="70" aria-hidden="true"></canvas>
+            </div>
+            <button id="probe" aria-label="選んだ部材を小突いて手応えを聴く" disabled>
+              ♪ <span>聴く</span>
+            </button>
+            <button id="extract" class="primary" disabled>一本抜く <span aria-hidden="true">↗</span></button>
+            <button id="deselect" class="deselect" aria-label="選択を解除">×</button>
+          </section>
+          <p id="sound-cue" class="sound-cue" role="status" hidden>
+            <span id="sound-impression"></span>
+          </p>
+          <p id="audio-description" class="audio-description" hidden></p>
+          <div id="ended-actions" class="ended-actions" hidden>
+            <button id="result-open">結果を見る</button><button id="restart">もう一度 ↗</button
+            ><button id="next-stage" class="primary" hidden>次のステージ →</button>
+          </div>
+        </div>
+        <div class="settling" id="settling" hidden>
+          <span class="live-dot"></span><span id="settling-label">まだ、揺れが戻ってくるかも。</span>
+        </div>
+        <p class="orbit-hint">ドラッグで回転</p>
+        <details id="view-menu" class="view-menu">
+          <summary aria-label="視点と表示の操作">表示 <span aria-hidden="true">⌃</span></summary>
+          <div class="view-panel">
+            <div class="view-tools" role="group" aria-label="視点操作">
+              <button id="view-left" aria-label="左へ回す">↶</button
+              ><button id="view-home" aria-label="視点を戻す">⌂</button
+              ><button id="view-right" aria-label="右へ回す">↷</button
+              ><button id="view-in" aria-label="拡大">＋</button
+              ><button id="view-out" aria-label="縮小">−</button>
+            </div>
+            <button id="members-toggle" aria-pressed="false">部材を見やすく</button>
+            <button id="original-toggle" aria-pressed="false">元のかたちを重ねる</button>
+          </div>
+        </details>
+      </section>
+    </main>
+    <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+      <button class="close-dialog" data-close="settings-dialog" aria-label="設定を閉じる">×</button>
+      <div id="setup-content" class="setup-content">
+        <p class="eyebrow">CHOOSE YOUR STRUCTURE</p>
+        <h2 id="settings-title">アーキテクチャを選ぶ</h2>
+        <nav id="stage-chapters" class="stage-chapters" aria-label="難易度で選ぶ"></nav>
+        <section class="exhibits" aria-label="構造を選ぶ" id="level-picker"></section>
+        <p class="assembly-note">同じかたちでも、組み付けと揺れは毎回少しずつ違います。</p>
+        <label class="music-setting" for="music-volume">
+          <span>BGM</span>
+          <input id="music-volume" type="range" min="0" max="100" value="40" step="5" />
+          <output id="music-volume-label" for="music-volume">40%</output>
+        </label>
+        <label class="caption-toggle"
+          ><input id="audio-captions" type="checkbox" /> 音の特徴を文字でも表示</label
+        >
+        <a class="related-link" href="https://m-masaki72.github.io/glass-shatter/">ガラス破壊の実験室 ↗</a>
+      </div>
+      <footer class="setup-footer">
+        <button id="setup-apply" class="primary wide">この構造で始める ↗</button>
+        <p class="setup-note">新しい挑戦が始まります。</p>
+      </footer>
+    </dialog>
+    <dialog id="records-dialog" class="records-dialog" aria-labelledby="records-title">
+      <button class="close-dialog" data-close="records-dialog" aria-label="記録を閉じる">×</button>
+      <p class="eyebrow">YOUR STUDY</p>
+      <h2 id="records-title">いまの余白。</h2>
+      <p id="round-tag"></p>
+      <div class="target-row"><span id="target-label"></span><span id="target-progress"></span></div>
+      <div class="collection-meta">
+        <div><b id="reduction">0%</b><span>削減率</span></div>
+        <div><b id="empty-count">0 本</b><span>軽い荷重</span></div>
+        <div><b id="best-score">—</b><span>自己ベスト</span></div>
+      </div>
+      <div class="small-heading">
+        <h3>取り出した部材</h3>
+        <span id="collection-count">0 pieces</span>
+      </div>
+      <div id="beam-tray" aria-label="取り出した部材の記録"></div>
+      <p class="record-note">
+        抜けた棒はすべて50点以上。荷重を受けていた棒には追加点。<br />完成させると、ボーナスが入ります。
+      </p>
+    </dialog>
+    <dialog id="help-dialog" class="help-dialog">
+      <button class="close-dialog" data-close="help-dialog" aria-label="遊び方を閉じる">×</button>
+      <p class="eyebrow">A LITTLE GUIDE</p>
+      <h2>構造に、耳をすます。</h2>
+      <ol>
+        <li>
+          <b>一本を選んで、小突く。</b
+          >石の柱も木の梁も選べます。土台は固定。重なった場所は「↻」で近くの候補を選び直せます。「表示」で部材の輪郭を強調できます。カラッと遊びがあるか、コツッと詰まっているか。一回の音で手応えを探ります。
+        </li>
+        <li>
+          <b>抜く一本を決める。</b
+          >「一本抜く」で取り出します。抜けたように見えても、数秒後の揺れで崩れることがあります。
+        </li>
+        <li>
+          <b>まだ立つなら、次の一本へ。</b
+          >余分な棒も目標の一本に。「ここで完成」を押したら、もうひと揺れを見届けて記録。目標達成なら次へ進めます。
+        </li>
+      </ol>
+      <div class="listening-guide">
+        <h3>音の手がかり</h3>
+        <p>
+          カラッと響くなら、少し遊びがありそう。<br />コツッと詰まるなら、つっぱっていそう。<br />言葉は手応えの印象。抜いて大丈夫かは、残る形も見て考えよう。
+        </p>
+        <small>音が使えないときは設定の「音の特徴を文字でも表示」をONに。</small>
+      </div>
+      <p>
+        自重を中心に、強弱のある小さな揺れが続きます。組み付けの微妙なズレも毎回変わるので、同じ一本でも手応えは少し違います。設定や遊び方を開いている間は、一時停止します。
+      </p>
+      <p class="keyboard-guide">
+        ドラッグ：回転 / スクロール：ズーム<br />矢印キー：部材選択 / Space：聴く / X：抜く / R：再挑戦 /
+        M：音
+      </p>
+      <button class="primary wide" data-close="help-dialog">さあ、一本目を。</button>
+    </dialog>
+    <dialog id="result-dialog" class="result-dialog">
+      <p class="eyebrow" id="result-eyebrow">LESS, AND STILL STANDING.</p>
+      <h2 id="result-title">この余白が、あなたの作品。</h2>
+      <p id="result-copy"></p>
+      <div class="result-numbers">
+        <div><strong id="result-score"></strong><span>SCORE</span></div>
+        <div><strong id="result-count"></strong><span>抜けた本数</span></div>
+        <div><strong id="result-reduction"></strong><span>削減率</span></div>
+      </div>
+      <p id="result-detail"></p>
+      <p id="save-status"></p>
+      <div class="result-actions">
+        <button id="result-next" class="primary" hidden>次のステージへ →</button>
+        <button id="result-retry" class="primary">もう一度、挑戦する ↗</button
+        ><button id="result-view">作品を見る</button
+        ><button id="result-replay" hidden>崩れ方をもう一度見る</button>
+      </div>
+    </dialog>
+    <section id="startup-error" class="startup-error" role="alert" hidden>
+      <h1>ゲームを開けませんでした</h1>
+      <p>通信状況と、ブラウザの3D描画設定を確認して、もう一度お試しください。</p>
+      <button id="startup-reload">もう一度読み込む</button>
+    </section>
+    <noscript
+      ><p class="startup-error">
+        このゲームにはJavaScriptが必要です。ブラウザの設定で有効にしてください。
+      </p></noscript
+    >
+    <script type="module" src="./js/game-bootstrap.js"></script>
+    <footer class="site-share" aria-label="ゲームを共有">
+      <span>共有する</span
+      ><a
+        href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fm-masaki72.github.io%2Fstructure-jenga%2F&amp;text=LESS%2C+STILL.+%E2%80%94+%E6%A7%8B%E9%80%A0%E5%88%86%E8%A7%A3"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Xで共有（新しいタブで開く）"
+        >X ↗</a
+      >
+      <a
+        href="https://social-plugins.line.me/lineit/share?url=https%3A%2F%2Fm-masaki72.github.io%2Fstructure-jenga%2F"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="LINEで共有（新しいタブで開く）"
+        >LINE ↗</a
+      >
+      <button id="clear-saved-data">保存データを消す</button><button id="copy-link">URLをコピー</button
+      ><input
+        id="share-url"
+        aria-label="共有するURL"
+        value="https://m-masaki72.github.io/structure-jenga/"
+        readonly
+        hidden
+      />
+      <a href="https://github.com/m-masaki72/structure-jenga" target="_blank" rel="noopener noreferrer"
+        >GitHub ↗</a
+      >
+      <p id="share-status" role="status"></p>
+    </footer>
+    <script type="module" src="./js/site-share.js"></script>
+  </body>
+</html>

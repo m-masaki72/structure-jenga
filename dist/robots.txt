@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://m-masaki72.github.io/structure-jenga/sitemap.xml

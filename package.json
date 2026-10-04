@@ -1,0 +1,32 @@
+{
+  "name": "structure-jenga",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -B -m http.server 8770 --bind 127.0.0.1 --directory dist",
+    "check": "node tools/check-syntax.mjs",
+    "lint": "eslint dist/js tests tools eslint.config.js playwright.config.mjs",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "test": "node --test tests/unit/*.mjs",
+    "verify": "npm run check && npm run lint && npm run format:check && npm test",
+    "test:e2e": "playwright test",
+    "generate:icons": "node tools/generate-icons.mjs"
+  },
+  "dependencies": {
+    "three": "0.180.0",
+    "@dimforge/rapier3d-compat": "0.21.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "eslint": "10.11.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.9"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
