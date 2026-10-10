@@ -32,11 +32,17 @@ export function makeLandscape(scene, renderer, reducedMotion) {
   scene.add(sky);
   const environmentScene = new THREE.Scene();
   environmentScene.add(sky.clone());
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const environment = pmrem.fromScene(environmentScene, 0.02, 0.1, 1000);
-  scene.environment = environment.texture;
+  // PMREM は描画結果なので、WebGL コンテキストが復帰したら作り直す
+  let environment;
+  const bakeEnvironment = () => {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    environment?.dispose();
+    environment = pmrem.fromScene(environmentScene, 0.02, 0.1, 1000);
+    scene.environment = environment.texture;
+    pmrem.dispose();
+  };
+  bakeEnvironment();
   scene.environmentIntensity = 0.5;
-  pmrem.dispose();
 
   scene.add(new THREE.HemisphereLight('#dceafb', '#666144', 1.35));
   const skyFill = new THREE.DirectionalLight('#dce8ef', 0.85);
@@ -190,9 +196,12 @@ export function makeLandscape(scene, renderer, reducedMotion) {
   addScaleReferences(scene, concrete);
   return {
     plinth,
-    environment,
+    get environment() {
+      return environment;
+    },
     grass,
     sun,
+    restore: bakeEnvironment,
     update(time) {
       wind.value = reducedMotion ? 0 : time;
     },

@@ -10,6 +10,7 @@ import { makeLandscape } from './structure-landscape.js';
 const Y = new THREE.Vector3(0, 1, 0);
 const point = (p) => new THREE.Vector3(...p);
 const ease = (t) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
+const COLLAPSE_SETTLE_SECONDS = 10;
 
 export class StructureView {
   constructor(host, onSelect, onImpact = () => {}) {
@@ -131,7 +132,6 @@ export class StructureView {
   }
   addStudio() {
     this.landscape = makeLandscape(this.scene, this.renderer, this.reducedMotion);
-    this.environment = this.landscape.environment;
     this.plinth = this.landscape.plinth;
   }
   updateConnections(id, mesh, visible) {
@@ -597,9 +597,12 @@ export class StructureView {
         dt = Math.min(0.05, Math.max(0, time - f.lastFrame));
       f.lastFrame = time;
       f.age += dt;
-      for (let i = 0; i < (this.reducedMotion ? 4 : 1); i++)
-        f.physics.step(dt * (this.reducedMotion ? 1 : 0.82));
-      const state = f.physics.snapshot();
+      // 大きな構造は崩れたあとも細かく転がり続けるので、一定時間で最終ポーズのまま止めて衝突音も打ち切る
+      if (f.age <= COLLAPSE_SETTLE_SECONDS)
+        for (let i = 0; i < (this.reducedMotion ? 4 : 1); i++)
+          f.physics.step(dt * (this.reducedMotion ? 1 : 0.82));
+      else f.settled ??= { ...f.physics.snapshot(), impacts: [] };
+      const state = f.settled ?? f.physics.snapshot();
       falling = new Map(state.members.map((member) => [member.id, member]));
       state.nodes.forEach((p, i) => this.positions[i].fromArray(p));
       // Keep the falling mass in frame instead of leaving it below the original tower's focus.

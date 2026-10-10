@@ -568,6 +568,7 @@ try {
     window.dispatchEvent(new Event('structure-render-error'));
   });
   view.renderer.domElement.addEventListener('webglcontextrestored', () => {
+    view.landscape.restore();
     ready = true;
     $('loading').hidden = true;
     update();
