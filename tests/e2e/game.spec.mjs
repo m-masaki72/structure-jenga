@@ -175,7 +175,10 @@ test('architecture and audio preferences survive a fresh page', async ({ page, c
 });
 
 test('limit mode runs a daily round through dialogs and submits it to the ranking', async ({ page }) => {
-  test.setTimeout(150000);
+  test.setTimeout(300000);
+  // 今日の構造は日替わりで重いこともある。ソフトウェア描画では 1 フレームで進む時間に上限があるので、
+  // 画面を小さくして描画を軽くし、待ち時間にも余裕を持たせる
+  await page.setViewportSize({ width: 640, height: 480 });
   const endpoint = 'https://ranking.test';
   const posted = [];
   // ランキング Worker の URL（endpoint の meta と CSP）を差し替え、Worker 自体はモックする
@@ -235,12 +238,12 @@ test('limit mode runs a daily round through dialogs and submits it to the rankin
         const { motion, status } = await snapshot();
         return status !== 'playing' || !motion.pending;
       },
-      { timeout: 30000 },
+      { timeout: 120000 },
     )
     .toBe(true);
   if ((await snapshot()).status === 'playing') await page.locator('#finish').click();
   // 完成でも崩壊でも時間切れでも、結果画面とランキングが出る
-  await expect(page.locator('#result-dialog')).toBeVisible({ timeout: 60000 });
+  await expect(page.locator('#result-dialog')).toBeVisible({ timeout: 120000 });
   await expect(page.locator('#ranking')).toBeVisible();
   await expect(page.locator('#ranking-list li').first()).toContainText('<b>ちな</b>');
   await page.locator('#ranking-name').fill('テスト');
