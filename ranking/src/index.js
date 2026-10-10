@@ -2,6 +2,7 @@
 // 送信はいったん pending で受け付け、tools/verify-scores.mjs（GitHub Actions）が
 // replayRound で再現して verified / rejected を付ける。順位に出すのは verified だけ。
 import { STAGE_ORDER } from '../../dist/js/structure-stages.js';
+import { dailyLevel } from '../../dist/js/structure-levels.js';
 import { dailySeed, jstDay } from '../../dist/js/structure-motion.js';
 
 const LEVELS = new Set(STAGE_ORDER);
@@ -66,6 +67,8 @@ async function submit(request, env, now) {
   if (!LEVELS.has(level)) return fail(400, 'unknown level');
   // 日付の境目をまたいだ挑戦も受け付けるよう、今日と前日だけ許す
   if (day !== jstDay(now) && day !== jstDay(now - DAY_MS)) return fail(400, 'day closed');
+  // 限界モードはその日の構造だけ。ほかの構造の送信は受け付けない
+  if (level !== dailyLevel(day)) return fail(400, 'not the daily structure');
   if (seed !== dailySeed(day, level)) return fail(400, 'seed mismatch');
   if (!name) return fail(400, 'invalid name');
   if (typeof player !== 'string' || !/^[0-9a-f-]{16,64}$/i.test(player)) return fail(400, 'invalid player');

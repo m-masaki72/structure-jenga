@@ -7,6 +7,7 @@ import { judge } from '../../tools/verify-scores.mjs';
 import { StructureGame, STEP } from '../../dist/js/structure-game.js';
 import { dailySeed, jstDay } from '../../dist/js/structure-motion.js';
 import { prepareAnalysis } from '../../dist/js/structure-solver.js';
+import { dailyLevel, DAILY_POOL } from '../../dist/js/structure-levels.js';
 
 // D1 の API を node:sqlite で真似る
 function fakeD1() {
@@ -31,6 +32,7 @@ function fakeD1() {
 
 const NOW = Date.parse('2026-10-10T03:00:00Z');
 const DAY = jstDay(NOW);
+const LEVEL = dailyLevel(DAY);
 const PLAYER = '0123456789abcdef0123';
 const env = () => ({ DB: fakeD1(), VERIFY_TOKEN: 'secret' });
 const call = (environment, method, path, body, headers = {}) =>
@@ -44,7 +46,7 @@ const call = (environment, method, path, body, headers = {}) =>
     NOW,
   );
 
-function playedRound(level = 'pyramid') {
+function playedRound(level = LEVEL) {
   const game = new StructureGame(level, { seed: dailySeed(DAY, level), mode: 'limit' });
   for (let n = 0; n < 2; n++) {
     for (let i = 0; i < 30; i++) game.advance(STEP);
@@ -91,7 +93,7 @@ test('a submitted round stays off the board until the verifier replays it', asyn
   const environment = env();
   const game = playedRound();
   const submission = {
-    level: 'pyramid',
+    level: LEVEL,
     day: DAY,
     seed: game.seed,
     actions: game.actions,
@@ -101,7 +103,7 @@ test('a submitted round stays off the board until the verifier replays it', asyn
   };
   const posted = await call(environment, 'POST', '/scores', submission);
   assert.equal(posted.status, 201);
-  let board = await (await call(environment, 'GET', `/scores?level=pyramid&player=${PLAYER}`)).json();
+  let board = await (await call(environment, 'GET', `/scores?level=${LEVEL}&player=${PLAYER}`)).json();
   assert.equal(board.daily.length, 0);
   assert.equal(board.mine[0].status, 'pending');
 
@@ -113,7 +115,7 @@ test('a submitted round stays off the board until the verifier replays it', asyn
   assert.equal(verdicts[0].status, 'verified');
   await call(environment, 'POST', '/verdicts', { verdicts }, auth);
 
-  board = await (await call(environment, 'GET', `/scores?level=pyramid&player=${PLAYER}`)).json();
+  board = await (await call(environment, 'GET', `/scores?level=${LEVEL}&player=${PLAYER}`)).json();
   assert.deepEqual(
     board.daily.map(({ name, score }) => ({ name, score })),
     [{ name: 'ちな', score: game.stats.score }],
@@ -124,7 +126,7 @@ test('a submitted round stays off the board until the verifier replays it', asyn
 
 test('the verifier rejects an inflated score', () => {
   const game = playedRound();
-  const entry = { level: 'pyramid', day: DAY, seed: game.seed, actions: game.actions };
+  const entry = { level: LEVEL, day: DAY, seed: game.seed, actions: game.actions };
   assert.equal(judge({ ...entry, claimed: game.stats.score }).status, 'verified');
   assert.equal(judge({ ...entry, claimed: game.stats.score + 1 }).status, 'rejected');
   assert.equal(judge({ ...entry, seed: game.seed + 1, claimed: game.stats.score }).status, 'rejected');
@@ -133,9 +135,9 @@ test('the verifier rejects an inflated score', () => {
 test('submissions for another day, seed or level are refused', async () => {
   const environment = env();
   const base = {
-    level: 'pyramid',
+    level: LEVEL,
     day: DAY,
-    seed: dailySeed(DAY, 'pyramid'),
+    seed: dailySeed(DAY, LEVEL),
     actions: [{ step: 1, id: 0 }],
     score: 100,
     name: 'a',
@@ -144,9 +146,14 @@ test('submissions for another day, seed or level are refused', async () => {
   const old = '2026-10-01';
   assert.equal((await call(environment, 'POST', '/scores', { ...base, level: 'nope' })).status, 400);
   assert.equal((await call(environment, 'POST', '/scores', { ...base, seed: 1 })).status, 400);
+  const other = DAILY_POOL.find((id) => id !== LEVEL);
   assert.equal(
-    (await call(environment, 'POST', '/scores', { ...base, day: old, seed: dailySeed(old, 'pyramid') }))
+    (await call(environment, 'POST', '/scores', { ...base, level: other, seed: dailySeed(DAY, other) }))
       .status,
+    400,
+  );
+  assert.equal(
+    (await call(environment, 'POST', '/scores', { ...base, day: old, seed: dailySeed(old, LEVEL) })).status,
     400,
   );
   assert.equal((await call(environment, 'POST', '/scores', { ...base, name: '' })).status, 400);
