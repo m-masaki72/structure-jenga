@@ -15,7 +15,7 @@
     </script>
     <meta
       name="description"
-      content="部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。石と木のつながりや重さのかかり方を楽しめます。"
+      content="部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。制限時間で崩れるぎりぎりを攻める限界モードと、日替わりのオンラインランキングも。"
     />
     <link rel="canonical" href="https://structure-jenga.morilab-garage.com/" />
     <link rel="icon" type="image/svg+xml" sizes="any" href="./favicon.svg" />
@@ -26,7 +26,7 @@
     <meta property="og:title" content="LESS, STILL. — 構造分解" />
     <meta
       property="og:description"
-      content="部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。石と木のつながりや重さのかかり方を楽しめます。"
+      content="部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。制限時間で崩れるぎりぎりを攻める限界モードと、日替わりのオンラインランキングも。"
     />
     <meta property="og:url" content="https://structure-jenga.morilab-garage.com/" />
     <meta property="og:locale" content="ja_JP" />
@@ -36,6 +36,11 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="構造を抜いて残すパズルのイメージ" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LESS, STILL. — 構造分解" />
+    <meta
+      name="twitter:description"
+      content="部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。制限時間で崩れるぎりぎりを攻める限界モードと、日替わりのオンラインランキングも。"
+    />
     <meta name="twitter:image" content="https://structure-jenga.morilab-garage.com/images/ogp.jpg" />
     <meta name="twitter:image:alt" content="構造を抜いて残すパズルのイメージ" />
     <script type="application/ld+json">
@@ -43,7 +48,7 @@
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": "LESS, STILL. — 構造分解",
-        "description": "部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。石と木のつながりや重さのかかり方を楽しめます。",
+        "description": "部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズル。制限時間で崩れるぎりぎりを攻める限界モードと、日替わりのオンラインランキングも。",
         "url": "https://structure-jenga.morilab-garage.com/",
         "inLanguage": "ja",
         "image": "https://structure-jenga.morilab-garage.com/images/ogp.jpg",
@@ -51,6 +56,20 @@
         "operatingSystem": "Web browser",
         "gamePlatform": "Web browser",
         "isAccessibleForFree": true,
+        "genre": ["パズル", "物理"],
+        "playMode": "SinglePlayer",
+        "dateModified": "2026-10-11",
+        "author": {
+          "@type": "Person",
+          "name": "m-masaki72",
+          "url": "https://github.com/m-masaki72"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "morilab garage",
+          "url": "https://morilab-garage.com/"
+        },
+        "sameAs": "https://github.com/m-masaki72/structure-jenga",
         "license": "https://github.com/m-masaki72/structure-jenga/blob/main/LICENSE"
       }
     </script>
@@ -88,6 +107,7 @@
       </nav>
     </header>
     <main inert>
+      <h1 class="visually-hidden">LESS, STILL. — 構造分解</h1>
       <section class="workspace" aria-label="構造分解">
         <div
           id="structure-viewport"
@@ -302,7 +322,7 @@
       </div>
     </dialog>
     <section id="startup-error" class="startup-error" role="alert" hidden>
-      <h1>ゲームを開けませんでした</h1>
+      <h2>ゲームを開けませんでした</h2>
       <p>
         通信状況と、ブラウザの3D描画設定を確認して、もう一度お試しください。古いブラウザ（iOS
         16.3以前のSafariなど）では動きません。

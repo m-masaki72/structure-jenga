@@ -16,6 +16,8 @@ test('public metadata and bundled assets are present', async ({ page, request })
   const ld = JSON.parse(await page.locator('script[type="application/ld+json"]').textContent());
   expect(ld['@type']).toBe('VideoGame');
   expect(ld.url).toBe(canonical);
+  expect(ld.publisher.url).toBe('https://morilab-garage.com/');
+  await expect(page.locator('h1')).toHaveText('LESS, STILL. — 構造分解');
   for (const asset of [
     '/favicon.svg',
     '/apple-touch-icon.png',
