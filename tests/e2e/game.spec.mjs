@@ -152,7 +152,7 @@ test('limit mode runs a daily round through dialogs and submits it to the rankin
   await page.route('**/index.html', async (route) => {
     const response = await route.fetch();
     const html = (await response.text()).replace(
-      '<meta name="ranking-endpoint" content="" />',
+      /<meta name="ranking-endpoint" content="[^"]*" \/>/,
       `<meta name="ranking-endpoint" content="${endpoint}" />`,
     );
     await route.fulfill({ response, body: html });
