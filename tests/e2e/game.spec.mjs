@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { replayRound } from '../../dist/js/structure-game.js';
+import { dailyLevel } from '../../dist/js/structure-levels.js';
 
 const canonical = 'https://structure-jenga.morilab-garage.com/';
 async function openGame(page) {
@@ -132,14 +133,38 @@ test('keyboard probes and removes a member', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.structureStudy.snapshot().removed.length)).toBe(1);
 });
 
+test('the first stage guides each step and stays closed once dismissed', async ({ page, context }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await openGame(page);
+  const coach = () => page.evaluate(() => window.structureStudy.snapshot().coach);
+  await expect(page.locator('#coach')).toBeVisible();
+  expect(await coach()).toEqual({ name: 'guide', step: 1 });
+  const viewport = page.locator('#structure-viewport');
+  await viewport.focus();
+  await viewport.press('ArrowRight');
+  await expect.poll(coach).toEqual({ name: 'guide', step: 2 });
+  await expect(page.locator('#extract')).toHaveClass(/coach-target/);
+  await page.locator('#coach-close').click();
+  await expect(page.locator('#coach')).toBeHidden();
+  await page.close();
+  const reopened = await context.newPage();
+  await openGame(reopened);
+  expect(await reopened.evaluate(() => window.structureStudy.snapshot().coach)).toBeNull();
+  await reopened.locator('#help-open').click();
+  await reopened.locator('#guide-replay').click();
+  await expect(reopened.locator('#coach')).toBeVisible();
+});
+
 test('architecture and audio preferences survive a fresh page', async ({ page, context }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await openGame(page);
+  await page.locator('#sound-open').click();
   await page.locator('#sound-toggle').click();
+  await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#sound-dialog [data-close]').first().click();
   await page.locator('#settings-open').click();
-  await page.locator('[data-chapter="初級"]').click();
   await page.locator('[data-level="cube"]').click();
-  await page.locator('#setup-apply').click();
+  await expect(page.locator('#settings-dialog')).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.structureStudy.snapshot().level)).toBe('cube');
   await page.close();
   const reopened = await context.newPage();
@@ -183,11 +208,14 @@ test('limit mode runs a daily round through dialogs and submits it to the rankin
   await expect
     .poll(() => page.evaluate(() => window.structureStudy?.snapshot().ready), { timeout: 30000 })
     .toBe(true);
-  await page.locator('#settings-open').click();
-  await page.locator('[data-mode="limit"]').click();
-  await page.locator('#setup-apply').click();
+  await page.locator('#daily-open').click();
+  await expect(page.locator('#panel-daily')).toBeVisible();
+  await expect(page.locator('#daily-compare table')).toBeVisible();
+  await expect(page.locator('#daily-board li').first()).toContainText('<b>ちな</b>');
+  await page.locator('#daily-start').click();
   const snapshot = () => page.evaluate(() => window.structureStudy.snapshot());
   expect((await snapshot()).mode).toBe('limit');
+  expect((await snapshot()).level).toBe(dailyLevel((await snapshot()).day));
   await expect(page.locator('#limit-timer')).toBeVisible();
 
   // 限界モードはダイアログを開いても時間が進む

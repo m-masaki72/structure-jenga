@@ -91,23 +91,31 @@
           ここで完成 <span aria-hidden="true">✓</span>
         </button>
         <button
-          id="sound-toggle"
+          id="sound-open"
           class="icon-button"
-          aria-label="音のオン・オフ"
-          aria-pressed="true"
-          title="音のオン・オフ"
+          aria-label="音の設定"
+          aria-haspopup="dialog"
+          aria-controls="sound-dialog"
+          title="音の設定"
         >
           ♪
         </button>
         <button id="help-open" class="icon-button" aria-label="遊び方" title="遊び方">?</button>
         <button
-          id="settings-open"
-          class="architecture-button"
-          aria-label="アーキテクチャを選ぶ"
+          id="daily-open"
+          class="architecture-button daily-button"
           aria-haspopup="dialog"
           aria-controls="settings-dialog"
         >
-          アーキテクチャを選ぶ
+          今日の限界
+        </button>
+        <button
+          id="settings-open"
+          class="architecture-button"
+          aria-haspopup="dialog"
+          aria-controls="settings-dialog"
+        >
+          構造を選ぶ
         </button>
       </nav>
     </header>
@@ -124,7 +132,7 @@
         <p id="collapse-caption" role="status" hidden></p>
         <div id="loading" role="status">構造を組み立てています…</div>
         <div class="stage-title">
-          <button id="structure-open" aria-label="作品と条件を変更">
+          <button id="structure-open" aria-label="構造を選ぶ">
             <span id="stage-name">はじめの四面体</span><span class="chevron" aria-hidden="true">⌄</span>
           </button>
           <p>
@@ -149,6 +157,10 @@
         </button>
         <div class="stage-bottom">
           <p id="status" class="status" role="status" aria-live="polite"></p>
+          <div id="coach" class="coach" hidden>
+            <p role="status"><span id="coach-step" class="coach-step"></span><span id="coach-text"></span></p>
+            <button id="coach-close" class="coach-close">閉じる</button>
+          </div>
           <p id="stage-hint" class="stage-hint">柱も梁も、一本ずつ抜ける。</p>
           <p id="piece-guide" class="piece-guide">石と木をタップ · 土台は固定</p>
           <section id="selection-dock" class="selection-dock" aria-label="選んだ部材の操作" hidden>
@@ -200,31 +212,63 @@
       <button class="close-dialog" data-close="settings-dialog" aria-label="設定を閉じる">×</button>
       <div id="setup-content" class="setup-content">
         <p class="eyebrow">CHOOSE YOUR STRUCTURE</p>
-        <h2 id="settings-title">アーキテクチャを選ぶ</h2>
-        <div class="mode-picker" role="group" aria-label="ルール">
-          <button data-mode="classic" aria-pressed="true">
-            <strong>ふつう</strong><small>時間無制限。じっくり聴いて抜く</small>
+        <h2 id="settings-title">構造を選ぶ</h2>
+        <div class="setup-tabs" role="tablist" aria-label="遊び方を選ぶ">
+          <button id="tab-stages" role="tab" aria-controls="panel-stages" aria-selected="true">
+            <strong>ステージ</strong><small>時間無制限・20の構造</small>
           </button>
-          <button data-mode="limit" aria-pressed="false">
-            <strong>限界モード</strong><small>制限時間つき・揺れが強まる・日替わりランキング</small>
+          <button id="tab-daily" role="tab" aria-controls="panel-daily" aria-selected="false" tabindex="-1">
+            <strong>今日の限界</strong><small>制限時間つき・日替わりランキング</small>
           </button>
         </div>
-        <nav id="stage-chapters" class="stage-chapters" aria-label="難易度で選ぶ"></nav>
-        <section class="exhibits" aria-label="構造を選ぶ" id="level-picker"></section>
-        <p class="assembly-note">同じかたちでも、組み付けと揺れは毎回少しずつ違います。</p>
-        <label class="music-setting" for="music-volume">
-          <span>BGM</span>
-          <input id="music-volume" type="range" min="0" max="100" value="40" step="5" />
-          <output id="music-volume-label" for="music-volume">40%</output>
-        </label>
-        <label class="caption-toggle"
-          ><input id="audio-captions" type="checkbox" /> 音の特徴を文字でも表示</label
-        >
+        <section id="panel-stages" class="setup-panel" role="tabpanel" aria-labelledby="tab-stages">
+          <p class="panel-lead">時間は無制限。音を聴きながら、目標の本数を抜いて「ここで完成」。</p>
+          <button id="continue-stage" class="continue-stage primary" hidden></button>
+          <div id="level-picker" class="stage-list"></div>
+          <p class="assembly-note">同じかたちでも、組み付けと揺れは毎回少しずつ違います。</p>
+        </section>
+        <section id="panel-daily" class="setup-panel" role="tabpanel" aria-labelledby="tab-daily" hidden>
+          <p class="panel-lead">
+            限界モード。毎日ひとつの構造を、全員が同じ組み付けと揺れで。持ち時間の中で、崩れる手前まで抜く。
+          </p>
+          <div class="daily-card">
+            <div>
+              <span id="daily-date" class="level-number"></span>
+              <strong id="daily-name"></strong>
+              <small id="daily-meta"></small>
+            </div>
+            <div id="daily-preview" class="daily-preview"></div>
+          </div>
+          <div id="daily-compare" class="mode-compare"></div>
+          <section id="daily-ranking" class="daily-ranking" aria-labelledby="daily-ranking-title" hidden>
+            <h3 id="daily-ranking-title">今日の上位</h3>
+            <ol id="daily-board" class="ranking-list"></ol>
+            <p id="daily-mine" class="ranking-mine"></p>
+          </section>
+          <p id="daily-reset" class="assembly-note"></p>
+        </section>
       </div>
-      <footer class="setup-footer">
-        <button id="setup-apply" class="primary wide">この構造で始める ↗</button>
-        <p class="setup-note">新しい挑戦が始まります。</p>
+      <footer id="daily-footer" class="setup-footer" hidden>
+        <button id="daily-start" class="primary wide">挑戦する ↗</button>
+        <p class="setup-note">押すと持ち時間が減りはじめます。メニューを開いても止まりません。</p>
       </footer>
+    </dialog>
+    <dialog id="sound-dialog" class="sound-dialog" aria-labelledby="sound-title">
+      <button class="close-dialog" data-close="sound-dialog" aria-label="音の設定を閉じる">×</button>
+      <p class="eyebrow">SOUND</p>
+      <h2 id="sound-title">音の設定</h2>
+      <button id="sound-toggle" class="sound-switch" aria-pressed="true">
+        <span>音</span><b id="sound-state">ON</b>
+      </button>
+      <label class="music-setting" for="music-volume">
+        <span>BGM</span>
+        <input id="music-volume" type="range" min="0" max="100" value="40" step="5" />
+        <output id="music-volume-label" for="music-volume">40%</output>
+      </label>
+      <label class="caption-toggle"
+        ><input id="audio-captions" type="checkbox" /> 音の特徴を文字でも表示</label
+      >
+      <p>音が出せない場所でも、文字で手応えを確かめられます。キーボードの M でも音を切り替えられます。</p>
     </dialog>
     <dialog id="records-dialog" class="records-dialog" aria-labelledby="records-title">
       <button class="close-dialog" data-close="records-dialog" aria-label="記録を閉じる">×</button>
@@ -269,18 +313,16 @@
         <p>
           カラッと響くなら、少し遊びがありそう。<br />コツッと詰まるなら、つっぱっていそう。<br />言葉は手応えの印象。抜いて大丈夫かは、残る形も見て考えよう。
         </p>
-        <small>音が使えないときは「アーキテクチャを選ぶ」の中の「音の特徴を文字でも表示」をONに。</small>
+        <small>音が使えないときは「♪」の音の設定で「音の特徴を文字でも表示」をONに。</small>
       </div>
       <p>
-        自重を中心に、強弱のある小さな揺れが続きます。組み付けの微妙なズレも毎回変わるので、同じ一本でも手応えは少し違います。メニューや遊び方を開いている間は、一時停止します。
+        自重を中心に、強弱のある小さな揺れが続きます。組み付けの微妙なズレも毎回変わるので、同じ一本でも手応えは少し違います。ステージでは、メニューや遊び方を開いている間は一時停止します。
       </p>
       <div class="listening-guide">
-        <h3>限界モード</h3>
-        <p>
-          持ち時間は目標本数×6秒。揺れは時間とともに強まります。荷重を多く受けていた棒ほど高得点、ぎりぎりで踏ん張った一本は×1.2。崩れたら合計の30%を失い、早めに「ここで完成」すると残り時間に応じたボーナス。組み付けと揺れは日替わりで全員共通です。
-        </p>
-        <small>限界モードは、メニューを開いても止まりません。</small>
+        <h3>ステージと今日の限界</h3>
+        <div id="help-compare" class="mode-compare"></div>
       </div>
+      <button id="guide-replay" class="wide">最初のガイドをもう一度</button>
       <p class="keyboard-guide">
         ドラッグ：回転 / スクロール：ズーム<br />矢印キー：部材選択 / Space：聴く / X：抜く / R：再挑戦 /
         M：音

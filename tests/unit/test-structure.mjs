@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { analyze, prepareAnalysis } from '../../dist/js/structure-solver.js';
-import { makeStructure, CATALOG } from '../../dist/js/structure-levels.js';
-import { StructureGame, readRecords, saveRecord, SAVE_KEY } from '../../dist/js/structure-game.js';
+import { makeStructure, CATALOG, dailyLevel, DAILY_POOL } from '../../dist/js/structure-levels.js';
+import {
+  StructureGame,
+  readRecords,
+  saveRecord,
+  recordCleared,
+  SAVE_KEY,
+} from '../../dist/js/structure-game.js';
 import { voiceProfile, soundImpression } from '../../dist/js/structure-audio.js';
 import { swayAt } from '../../dist/js/structure-motion.js';
 
@@ -380,4 +386,43 @@ test('grounded members are locked outside the first chapter', () => {
   assert.equal(game.removed.size, 0);
   const tutorial = new StructureGame('tetra', { seed: 17 });
   assert.ok(![...tutorial.result.members.values()].some((m) => m.foundation));
+});
+
+test('the daily structure skips the first chapter, cycles through all and never repeats two days in a row', () => {
+  assert.deepEqual(
+    DAILY_POOL,
+    CATALOG.filter((level) => level.chapter !== CATALOG[0].chapter).map((level) => level.id),
+  );
+  assert.equal(DAILY_POOL.length, 15);
+  const day = (n) => new Date(Date.UTC(2026, 0, 1) + n * 86400e3).toISOString().slice(0, 10);
+  const levels = Array.from({ length: 1200 }, (_, n) => dailyLevel(day(n)));
+  assert.equal(dailyLevel('2026-10-11'), dailyLevel('2026-10-11'));
+  for (let n = 1; n < levels.length; n++) assert.notEqual(levels[n], levels[n - 1], day(n));
+  for (const id of levels) assert.ok(DAILY_POOL.includes(id));
+  // 15日ごとの区切りの中では、どの構造もちょうど一回ずつ出る
+  const start = Math.ceil(Date.UTC(2026, 0, 1) / 86400e3 / 15) * 15 - Date.UTC(2026, 0, 1) / 86400e3;
+  assert.equal(new Set(levels.slice(start, start + 15)).size, 15);
+  assert.ok(DAILY_POOL.includes(dailyLevel('not a day')));
+});
+
+test('a cleared stage stays cleared, and old records infer it from the count', () => {
+  const data = new Map();
+  const storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+  const game = new StructureGame('spire', { seed: 17 });
+  while (game.status === 'playing') {
+    game.remove([...game.result.members.values()].find((m) => !m.foundation).id);
+    game.advance(8);
+  }
+  assert.equal(game.status, 'collapsed');
+  saveRecord(storage, game);
+  assert.equal(readRecords(storage).spire.cleared, false);
+  data.set(SAVE_KEY, JSON.stringify({ spire: { score: 0, count: 0, cleared: true } }));
+  saveRecord(storage, game);
+  assert.equal(readRecords(storage).spire.score, game.stats.score);
+  assert.equal(readRecords(storage).spire.cleared, true, 'a later collapse keeps the clear');
+  const target = makeStructure('spire').target;
+  assert.equal(recordCleared(undefined, target), false);
+  assert.equal(recordCleared({ score: 10, count: target }, target), true);
+  assert.equal(recordCleared({ score: 10, count: target - 1 }, target), false);
+  assert.equal(recordCleared({ score: 10, count: target, cleared: false }, target), false);
 });

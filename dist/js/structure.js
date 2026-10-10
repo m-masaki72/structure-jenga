@@ -1,5 +1,12 @@
-import { CATALOG, makeStructure } from './structure-levels.js';
-import { StructureGame, readRecords, saveRecord, recordKey, LIMIT_RULES } from './structure-game.js';
+import { CATALOG, makeStructure, dailyLevel, levelById } from './structure-levels.js';
+import {
+  StructureGame,
+  readRecords,
+  saveRecord,
+  recordKey,
+  recordCleared,
+  LIMIT_RULES,
+} from './structure-game.js';
 import { StructureAudio } from './structure-audio.js';
 import { StructureCaptions } from './structure-captions.js';
 import { CHAPTERS } from './structure-stages.js';
@@ -12,8 +19,8 @@ import {
   AUDIO_ENABLED_KEY,
   AUDIO_CAPTIONS_KEY,
   MUSIC_VOLUME_KEY,
-  MODE_KEY,
   NICKNAME_KEY,
+  TIPS_KEY,
 } from './storage-keys.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,14 +34,8 @@ function restoredArchitecture() {
     return 'tetra';
   }
 }
-function restoredMode() {
-  try {
-    return localStorage.getItem(MODE_KEY) === 'limit' ? 'limit' : 'classic';
-  } catch {
-    return 'classic';
-  }
-}
-let mode = restoredMode(),
+// 再訪時はいつもステージ（ふつうモード）から。限界モードは「今日の限界」から毎回入る
+let mode = 'classic',
   roundDay = jstDay();
 // 限界モードは日替わりの共通シード（?seed= があればそちらを優先。ただしランキングには送れない）
 function roundOptions(level) {
@@ -54,8 +55,10 @@ try {
   // Browser privacy settings can block localStorage.
 }
 function updateSoundButton() {
-  $('sound-toggle').textContent = audio.enabled ? '♪' : '♪̸';
-  $('sound-toggle').title = audio.enabled ? '音 ON' : '音 OFF';
+  $('sound-open').textContent = audio.enabled ? '♪' : '♪̸';
+  $('sound-open').title = `音の設定（いまは${audio.enabled ? 'ON' : 'OFF'}）`;
+  $('sound-open').setAttribute('aria-label', $('sound-open').title);
+  $('sound-state').textContent = audio.enabled ? 'ON' : 'OFF';
   $('sound-toggle').setAttribute('aria-pressed', String(audio.enabled));
 }
 updateSoundButton();
@@ -86,9 +89,7 @@ let view,
   collapsing = false,
   ready = false;
 let saveResult = null;
-let setupLevel = game.structure.id,
-  setupChapter = game.structure.chapter,
-  setupMode = mode,
+let setupTab = 'stages',
   noticeTimer;
 let board = null,
   boardTab = 'daily',
@@ -111,18 +112,6 @@ function savePreference(key, value) {
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const nextStage = () => CATALOG[CATALOG.findIndex((level) => level.id === game.structure.id) + 1];
 
-for (const chapter of CHAPTERS) {
-  const button = document.createElement('button');
-  button.textContent = chapter;
-  button.dataset.chapter = chapter;
-  button.setAttribute('aria-pressed', String(chapter === setupChapter));
-  button.addEventListener('click', () => {
-    setupChapter = chapter;
-    updateSetup();
-  });
-  $('stage-chapters').append(button);
-}
-
 function preview(structure) {
   const points = structure.nodes.map(({ p }) => [p[0] + p[2] * 0.4, -p[1] + p[2] * 0.15]);
   const minX = Math.min(...points.map((p) => p[0])),
@@ -134,18 +123,141 @@ function preview(structure) {
     `${(points[i][0] - (minX + maxX) / 2) * scale + 50},${(points[i][1] - (minY + maxY) / 2) * scale + 32}`;
   return `<svg viewBox="0 0 100 65" aria-hidden="true">${structure.members.map((m) => `<path d="M${project(m.a)}L${project(m.b)}" />`).join('')}</svg>`;
 }
-for (const level of CATALOG) {
-  const button = document.createElement('button');
-  button.className = 'exhibit';
-  button.dataset.level = level.id;
-  button.hidden = level.chapter !== setupChapter;
-  button.setAttribute('aria-pressed', String(level.id === game.structure.id));
-  button.innerHTML = `<span class="exhibit-number">${level.number}</span><span><strong>${level.name}</strong><small>${level.challenge}</small></span>${preview(makeStructure(level.id))}`;
-  button.addEventListener('click', () => {
-    setupLevel = level.id;
-    updateSetup();
-  });
-  $('level-picker').append(button);
+const previews = new Map(CATALOG.map((level) => [level.id, preview(makeStructure(level.id))]));
+function element(tag, className, text = '') {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  node.textContent = text;
+  return node;
+}
+// ステージは章ごとの見出しの下に全部並べ、押したらすぐ始める
+for (const chapter of CHAPTERS) {
+  const group = element('section', 'stage-group');
+  const heading = element('h3');
+  heading.dataset.chapter = chapter;
+  group.append(heading);
+  for (const level of CATALOG.filter((level) => level.chapter === chapter)) {
+    const button = element('button', 'stage-row');
+    button.dataset.level = level.id;
+    const text = element('span', 'stage-row-text');
+    text.append(
+      element('strong', '', level.name),
+      element('small', '', `${level.challenge} · 目標 ${level.target}本`),
+    );
+    button.append(element('span', 'level-number', level.number), text, element('span', 'stage-row-status'));
+    button.insertAdjacentHTML('beforeend', previews.get(level.id));
+    button.addEventListener('click', () => startRound(level.id, 'classic'));
+    group.append(button);
+  }
+  $('level-picker').append(group);
+}
+
+// ステージと今日の限界の違い（「構造を選ぶ」と「遊び方」の両方に出す）
+const MODE_COMPARE = [
+  ['構造', '20の構造から選ぶ', '毎日ひとつ。全員が同じ組み付けと揺れ'],
+  [
+    '時間',
+    '無制限。メニューを開くと止まる',
+    `目標本数×${LIMIT_RULES.secondsPerTarget}秒。メニューを開いても止まらない`,
+  ],
+  ['揺れ', 'かすかな揺れが続く', 'だんだん強まる'],
+  [
+    '得点',
+    '目標の本数を抜いて「ここで完成」でボーナス',
+    `荷重を受けていた棒ほど高得点。ぎりぎりの一本は×${LIMIT_RULES.edgeMultiplier}、早めの完成は残り時間ボーナス`,
+  ],
+  ['崩れたら', '崩れた一本は加点なし', `合計の${Math.round((1 - LIMIT_RULES.collapseKeep) * 100)}%を失う`],
+  ['記録', 'このブラウザに自己ベスト', '日替わりランキングに送れる'],
+];
+for (const id of ['daily-compare', 'help-compare']) {
+  const table = document.createElement('table');
+  const head = table.createTHead().insertRow();
+  for (const text of ['', 'ステージ', '今日の限界']) {
+    const cell = element('th', '', text);
+    cell.scope = 'col';
+    head.append(cell);
+  }
+  const body = table.createTBody();
+  for (const [label, classic, limit] of MODE_COMPARE) {
+    const row = body.insertRow();
+    const cell = element('th', '', label);
+    cell.scope = 'row';
+    row.append(cell);
+    row.insertCell().textContent = classic;
+    row.insertCell().textContent = limit;
+  }
+  $(id).append(table);
+}
+
+// 最初のガイドと、新しいルールが初めて出てきたときの一度きりのヒント
+const tips = new Set();
+try {
+  for (const name of JSON.parse(localStorage.getItem(TIPS_KEY) ?? '[]')) tips.add(name);
+} catch {
+  // 保存できない環境では、毎回ガイドが出る
+}
+const saveTips = () => savePreference(TIPS_KEY, JSON.stringify([...tips]));
+function markTip(name) {
+  if (tips.has(name)) return;
+  tips.add(name);
+  saveTips();
+}
+// 01 をもうクリアしている人には、最初のガイドを出さない
+if (recordCleared(records()[CATALOG[0].id], CATALOG[0].target)) tips.add('guide');
+let coach = null;
+const GUIDE_STEPS = 4;
+function nextCoach() {
+  const s = game.stats,
+    playing = game.status === 'playing';
+  if (game.mode === 'classic' && game.structure.id === CATALOG[0].id && !tips.has('guide')) {
+    const step = (number, text, target) => ({ name: 'guide', step: number, text, target });
+    if (game.status === 'collapsed')
+      return step(null, '崩れても大丈夫。崩れる前に抜けた本数の点は残ります。「もう一度」で組み直せます。');
+    if (!playing) return null;
+    if (locked) return step(3, '抜いたあと数秒は、揺れで遅れて崩れることがあります。収まるまで見届けて。');
+    if (s.cleared)
+      return step(
+        4,
+        `目標の${game.structure.target}本を達成。さらに抜くと高得点、でも崩れたら…。「ここで完成」で記録が決まります。`,
+        'finish',
+      );
+    if (selected !== null)
+      return step(
+        2,
+        'コツッと詰まる音は、荷重を受けて突っ張っていそう。カラッと響くなら遊びがありそう。決めたら「一本抜く」。',
+        'extract',
+      );
+    if (s.count)
+      return step(3, `持ちこたえた。あと${game.structure.target - s.count}本。次の一本も、聴いてから。`);
+    return step(1, '石や木の部材をタップして選ぶ。選ぶと、小突いた音が鳴ります。');
+  }
+  if (!playing || locked) return null;
+  if (!tips.has('foundation') && game.structure.chapter !== CHAPTERS[0] && !game.history.length)
+    return { name: 'foundation', text: '初級からは、両端が地面についた暗い部材は土台。抜けません。' };
+  if (!tips.has('cycle') && selected !== null && (view?.candidates.length ?? 0) > 1)
+    return {
+      name: 'cycle',
+      text: '部材が重なった場所です。「↻」で近くの別の部材に切り替えられます。',
+      target: 'cycle-member',
+    };
+  return null;
+}
+function updateCoach() {
+  const next = nextCoach();
+  // ヒントは閉じるか、場面が変わって消えたら既読にする（ガイドは最後まで遊ぶか閉じたときだけ）
+  if (coach && coach.name !== 'guide' && coach.name !== next?.name) markTip(coach.name);
+  coach = next;
+  $('coach').hidden = !coach;
+  document.querySelectorAll('.coach-target').forEach((node) => node.classList.remove('coach-target'));
+  if (!coach) return;
+  $('coach-step').textContent = coach.step
+    ? `${coach.step} / ${GUIDE_STEPS}`
+    : coach.name === 'guide'
+      ? ''
+      : 'ヒント';
+  $('coach-text').textContent = coach.text;
+  $('coach-close').textContent = coach.name === 'guide' ? 'ガイドを閉じる' : 'わかった';
+  if (coach.target) $(coach.target).classList.add('coach-target');
 }
 
 function records() {
@@ -202,7 +314,14 @@ function update() {
     $('beam-tray').innerHTML = '<span class="tray-empty">ここに、あなたの選択が並びます。</span>';
   const canAct = ready && !locked && game.status === 'playing';
   const member = selected === null ? null : game.result.members.get(selected);
-  for (const id of ['help-open', 'settings-open', 'structure-open', 'records-open', 'result-open'])
+  for (const id of [
+    'help-open',
+    'settings-open',
+    'daily-open',
+    'structure-open',
+    'records-open',
+    'result-open',
+  ])
     $(id).disabled = collapsing;
   $('selected-name').textContent = member ? memberName(selected) : '未選択';
   $('selected-kind').textContent = member
@@ -232,16 +351,19 @@ function update() {
   $('settling-label').textContent = game.finishing
     ? 'もうひと揺れ、持ちこたえたら。'
     : 'まだ、揺れが戻ってくるかも。';
-  $('session-label').textContent = limit ? '限界モード · 揺れが強まっていく' : '自重と、かすかな揺れ';
-  $('stage-number').textContent = `${game.structure.number} / ${CATALOG.length}`;
+  $('session-label').textContent = limit ? '今日の限界 · 揺れが強まっていく' : '自重と、かすかな揺れ';
+  $('stage-number').textContent = limit ? roundDay : `${game.structure.number} / ${CATALOG.length}`;
   $('round-tag').textContent =
-    `${game.structure.number} / ${game.structure.name}${limit ? ` · 限界モード ${roundDay}` : ''}`;
+    `${game.structure.number} / ${game.structure.name}${limit ? ` · 今日の限界 ${roundDay}` : ''}`;
   $('stage-name').textContent = game.structure.name;
   const canAdvance = !limit && game.status === 'finished' && s.cleared && Boolean(nextStage());
   $('next-stage').hidden = $('result-next').hidden = !canAdvance;
   if (canAdvance) $('result-next').textContent = `次へ · ${nextStage().name} →`;
-  $('stage-hint').hidden = Boolean(member) || locked;
-  $('piece-guide').hidden = Boolean(member) || locked || game.status !== 'playing' || game.probes > 0;
+  updateCoach();
+  const guiding = coach?.name === 'guide';
+  $('stage-hint').hidden = Boolean(member) || locked || guiding;
+  $('piece-guide').hidden =
+    Boolean(member) || locked || guiding || game.status !== 'playing' || game.probes > 0;
   $('stage-hint').textContent =
     game.status === 'finished'
       ? '少なくなっても、まだ立っている。'
@@ -261,29 +383,118 @@ function update() {
   updateTimer();
 }
 
-function updateSetup() {
-  document
-    .querySelectorAll('[data-chapter]')
-    .forEach((button) =>
-      button.setAttribute('aria-pressed', String(button.dataset.chapter === setupChapter)),
+function renderStages() {
+  const saved = records();
+  const cleared = (level) => recordCleared(saved[level.id], level.target);
+  const next = CATALOG.find((level) => !cleared(level));
+  for (const row of document.querySelectorAll('.stage-row')) {
+    const level = levelById(row.dataset.level),
+      record = saved[level.id];
+    const current = game.mode === 'classic' && level.id === game.structure.id;
+    row.classList.toggle('cleared', cleared(level));
+    row.classList.toggle('next', level === next);
+    if (current) row.setAttribute('aria-current', 'true');
+    else row.removeAttribute('aria-current');
+    row.querySelector('.stage-row-status').textContent = cleared(level)
+      ? `✓ ${record.score.toLocaleString()}pt`
+      : record
+        ? `${record.score.toLocaleString()}pt`
+        : level === next
+          ? 'つぎ'
+          : '';
+  }
+  for (const heading of document.querySelectorAll('.stage-group h3')) {
+    const levels = CATALOG.filter((level) => level.chapter === heading.dataset.chapter);
+    heading.replaceChildren(
+      heading.dataset.chapter,
+      element('small', '', `${levels.filter(cleared).length} / ${levels.length}`),
     );
-  document.querySelectorAll('[data-level]').forEach((button) => {
-    button.setAttribute('aria-pressed', String(button.dataset.level === setupLevel));
-    button.hidden = CATALOG.find((level) => level.id === button.dataset.level).chapter !== setupChapter;
-  });
-  document
-    .querySelectorAll('[data-mode]')
-    .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mode === setupMode)));
-  $('setup-apply').textContent =
-    `${CATALOG.find((level) => level.id === setupLevel).name} を${setupMode === 'limit' ? '限界モードで' : ''}始める ↗`;
+  }
+  $('continue-stage').hidden = !next;
+  if (next)
+    $('continue-stage').replaceChildren(
+      element('small', '', 'つづきから'),
+      element('strong', '', `${next.number} ${next.name}`),
+      element('span', '', `目標 ${next.target}本 ↗`),
+    );
+  $('continue-stage').dataset.level = next?.id ?? '';
 }
-function openSetup() {
-  setupLevel = game.structure.id;
-  setupChapter = game.structure.chapter;
-  setupMode = mode;
-  updateSetup();
-  $('settings-dialog').showModal();
+function untilTomorrow(day) {
+  const minutes = Math.ceil((Date.parse(`${day}T00:00:00+09:00`) + 86400e3 - Date.now()) / 60e3);
+  return minutes >= 60 ? `${Math.floor(minutes / 60)}時間${minutes % 60}分` : `${minutes}分`;
+}
+function boardItems(rows, label, emptyText) {
+  const items = rows.map((row, index) => {
+    const item = element('li');
+    item.append(
+      element('span', '', index + 1),
+      element('span', '', label(row)),
+      element('b', '', row.score.toLocaleString()),
+    );
+    return item;
+  });
+  return items.length ? items : [element('li', 'empty', emptyText)];
+}
+let dailyBoardKey = null;
+async function renderDaily() {
+  const day = jstDay(),
+    level = levelById(dailyLevel(day)),
+    key = `${level.id}:${day}`;
+  $('daily-date').textContent = `${day} の構造 · ${level.chapter}`;
+  $('daily-name').textContent = level.name;
+  $('daily-meta').textContent =
+    `持ち時間 ${level.target * LIMIT_RULES.secondsPerTarget}秒 · 目安 ${level.target}本 · 自己ベスト ${records()[recordKey(level.id, 'limit')]?.score?.toLocaleString() ?? '—'}`;
+  $('daily-preview').replaceChildren();
+  $('daily-preview').insertAdjacentHTML('beforeend', previews.get(level.id));
+  $('daily-reset').textContent = `次の構造まで、あと${untilTomorrow(day)}。`;
+  $('daily-ranking').hidden = !rankingEnabled;
+  if (!rankingEnabled || dailyBoardKey === key) return;
+  dailyBoardKey = key;
+  $('daily-board').replaceChildren(element('li', 'empty', '読み込み中…'));
+  $('daily-mine').textContent = '';
+  try {
+    const result = await fetchBoard(level.id, day);
+    if (dailyBoardKey !== key) return;
+    $('daily-board').replaceChildren(
+      ...boardItems(
+        result.daily.slice(0, 5),
+        (row) => row.name,
+        'まだ掲載された記録はありません。一番乗りのチャンス。',
+      ),
+    );
+    const mine = result.mine?.filter((row) => row.status === 'verified').map((row) => row.score) ?? [];
+    $('daily-mine').textContent = mine.length
+      ? `自分の今日のベスト：${Math.max(...mine).toLocaleString()}pt`
+      : '';
+  } catch (error) {
+    if (dailyBoardKey !== key) return;
+    dailyBoardKey = null;
+    $('daily-board').replaceChildren(
+      element('li', 'empty', `ランキングを読み込めませんでした（${error.message}）。`),
+    );
+  }
+}
+function showTab(tab) {
+  setupTab = tab;
+  for (const name of ['stages', 'daily']) {
+    const active = name === tab;
+    $(`tab-${name}`).setAttribute('aria-selected', String(active));
+    $(`tab-${name}`).tabIndex = active ? 0 : -1;
+    $(`panel-${name}`).hidden = !active;
+  }
+  $('daily-footer').hidden = tab !== 'daily';
+  if (tab === 'daily') void renderDaily();
+  else renderStages();
   $('setup-content').scrollTop = 0;
+}
+function openSetup(tab = game.mode === 'limit' ? 'daily' : 'stages') {
+  showTab(tab);
+  $('settings-dialog').showModal();
+}
+function startRound(level, nextMode) {
+  if (game.status === 'playing' && game.history.length && !confirm('いまの挑戦をやめて始めますか？')) return;
+  mode = nextMode;
+  restart(level);
 }
 
 async function select(id, candidates = []) {
@@ -332,8 +543,8 @@ async function probe() {
     profile.grip > 0.4
       ? '短く乾いた音。荷重が掛かって、動きにくいような印象。'
       : '少し響きが残る音。小突くと遊びがあるような印象。';
-  if (!unlocked) announce('音を開始できません。「アーキテクチャを選ぶ」から音の文字表示をONにできます。');
-  else if (!audio.enabled) announce('音はOFFです。上部の音ボタンでONにできます。');
+  if (!unlocked) announce('音を開始できません。上部の「♪」から音の文字表示をONにできます。');
+  else if (!audio.enabled) announce('音はOFFです。上部の「♪」でONにできます。');
   else announce('');
   update();
 }
@@ -398,6 +609,7 @@ function handleMotion(events) {
     } else if (event.type === 'recovered') {
       announce('…揺れが戻った。まだ、立っている。');
     } else if (event.type === 'finished') {
+      if (coach?.name === 'guide') markTip('guide');
       locked = false;
       captions.cancel();
       audio.cancelProbe();
@@ -414,6 +626,8 @@ function closeDialogs() {
 }
 function restart(level = game.structure.id) {
   if (!ready) return;
+  // 限界モードは常にその日の構造（日付が変わっていれば新しい構造）で始める
+  if (mode === 'limit') level = dailyLevel(jstDay());
   generation++;
   captions.cancel();
   audio.cancelProbe();
@@ -432,9 +646,9 @@ function restart(level = game.structure.id) {
   $('audio-description').textContent = '';
   announce('');
   try {
-    localStorage.setItem(ARCHITECTURE_KEY, game.structure.id);
+    if (mode === 'classic') localStorage.setItem(ARCHITECTURE_KEY, game.structure.id);
   } catch {
-    announce('このブラウザでは、選んだアーキテクチャを保存できませんでした。');
+    announce('このブラウザでは、選んだ構造を保存できませんでした。');
   }
   update();
   $('structure-viewport').focus({ preventScroll: true });
@@ -539,25 +753,13 @@ function renderBoard() {
   document
     .querySelectorAll('[data-board]')
     .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.board === boardTab)));
-  const rows = board?.[boardTab] ?? [];
-  const items = rows.map((row, index) => {
-    const item = document.createElement('li');
-    const rank = document.createElement('span'),
-      name = document.createElement('span'),
-      score = document.createElement('b');
-    rank.textContent = index + 1;
-    name.textContent = boardTab === 'allTime' ? `${row.name} · ${row.day}` : row.name;
-    score.textContent = row.score.toLocaleString();
-    item.append(rank, name, score);
-    return item;
-  });
-  if (!items.length) {
-    const empty = document.createElement('li');
-    empty.className = 'empty';
-    empty.textContent = 'まだ掲載された記録はありません。';
-    items.push(empty);
-  }
-  $('ranking-list').replaceChildren(...items);
+  $('ranking-list').replaceChildren(
+    ...boardItems(
+      board?.[boardTab] ?? [],
+      (row) => (boardTab === 'allTime' ? `${row.name} · ${row.day}` : row.name),
+      'まだ掲載された記録はありません。',
+    ),
+  );
   $('ranking-mine').textContent = board?.mine?.length
     ? `自分の送信：${board.mine.map((row) => `${(row.score ?? row.claimed).toLocaleString()}pt ${STATUS_LABEL[row.status] ?? row.status}`).join(' / ')}`
     : '';
@@ -584,7 +786,7 @@ async function sendScore(event) {
     if (token !== generation) return;
     $('ranking-form').hidden = true;
     $('ranking-status').textContent = '送りました。リプレイ検証（10分ごと）が済むと順位に載ります。';
-    board = null;
+    board = dailyBoardKey = null;
     await loadBoard();
   } catch (error) {
     if (token !== generation) return;
@@ -599,12 +801,6 @@ document.querySelectorAll('[data-board]').forEach((button) =>
   button.addEventListener('click', () => {
     boardTab = button.dataset.board;
     renderBoard();
-  }),
-);
-document.querySelectorAll('[data-mode]').forEach((button) =>
-  button.addEventListener('click', () => {
-    setupMode = button.dataset.mode;
-    updateSetup();
   }),
 );
 function drawWave(time) {
@@ -648,15 +844,35 @@ $('deselect').addEventListener('click', () => {
   view.select(null);
   update();
 });
-$('settings-open').addEventListener('click', openSetup);
-$('structure-open').addEventListener('click', openSetup);
-$('records-open').addEventListener('click', () => $('records-dialog').showModal());
-$('setup-apply').addEventListener('click', () => {
-  if (game.status === 'playing' && game.history.length && !confirm('いまの挑戦をやめて始めますか？')) return;
-  mode = setupMode;
-  savePreference(MODE_KEY, mode);
-  restart(setupLevel);
+$('settings-open').addEventListener('click', () => openSetup());
+$('structure-open').addEventListener('click', () => openSetup());
+$('daily-open').addEventListener('click', () => openSetup('daily'));
+$('tab-stages').addEventListener('click', () => showTab('stages'));
+$('tab-daily').addEventListener('click', () => showTab('daily'));
+$('settings-dialog')
+  .querySelector('[role="tablist"]')
+  .addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    showTab(setupTab === 'stages' ? 'daily' : 'stages');
+    $(`tab-${setupTab}`).focus();
+  });
+$('continue-stage').addEventListener('click', () => startRound($('continue-stage').dataset.level, 'classic'));
+// 構造は restart がその日の構造に決める
+$('daily-start').addEventListener('click', () => startRound(null, 'limit'));
+$('coach-close').addEventListener('click', () => {
+  markTip(coach.name);
+  update();
 });
+$('guide-replay').addEventListener('click', () => {
+  tips.delete('guide');
+  saveTips();
+  $('help-dialog').close();
+  if (game.mode === 'classic' && game.structure.id === CATALOG[0].id && !game.history.length) update();
+  else startRound(CATALOG[0].id, 'classic');
+});
+$('sound-open').addEventListener('click', () => $('sound-dialog').showModal());
+$('records-open').addEventListener('click', () => $('records-dialog').showModal());
 $('result-open').addEventListener('click', showResult);
 $('restart').addEventListener('click', () => restart());
 for (const id of ['next-stage', 'result-next'])
@@ -827,6 +1043,7 @@ window.structureStudy = {
     },
     status: game.status,
     selected,
+    coach: coach && { name: coach.name, step: coach.step ?? null },
     selectionCandidates: [...(view?.candidates ?? [])],
     locked,
     stats: game.stats,

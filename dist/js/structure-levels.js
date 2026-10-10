@@ -1,5 +1,6 @@
 import { GEOMETRY_CATALOG, makeGeometricStructure } from './structure-geometry.js';
 import { NEW_STAGES, STAGE_ORDER, CHAPTERS, makeNewStage } from './structure-stages.js';
+import { dailySeed, randomSequence } from './structure-motion.js';
 
 const originals = [
   ...GEOMETRY_CATALOG,
@@ -36,6 +37,27 @@ export const CATALOG = STAGE_ORDER.map((id, i) => ({
   number: String(i + 1).padStart(2, '0'),
   chapter: CHAPTERS[Math.floor(i / 5)],
 }));
+export const levelById = (id) => CATALOG.find((level) => level.id === id);
+
+// 限界モードの「今日の構造」。入門を除く15構造を日替わりで一巡させ、同じ構造が二日続かないようにする
+export const DAILY_POOL = CATALOG.filter((level) => level.chapter !== CHAPTERS[0]).map((level) => level.id);
+function dailyOrder(cycle) {
+  const random = randomSequence(dailySeed(`cycle-${cycle}`, 'daily'));
+  const order = [...DAILY_POOL];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
+export function dailyLevel(day) {
+  const index = Math.floor(Date.parse(`${day}T00:00:00Z`) / 86400e3);
+  if (!Number.isFinite(index)) return DAILY_POOL[0];
+  const cycle = Math.floor(index / DAILY_POOL.length);
+  const order = dailyOrder(cycle);
+  if (order[0] === dailyOrder(cycle - 1).at(-1)) [order[0], order[1]] = [order[1], order[0]];
+  return order[index - cycle * DAILY_POOL.length];
+}
 
 function withFootrails(structure) {
   const feet = structure.nodes
@@ -66,7 +88,7 @@ export function makeStructure(id = 'spire') {
 }
 
 function buildStructure(id) {
-  const spec = CATALOG.find((level) => level.id === id) ?? CATALOG[0];
+  const spec = levelById(id) ?? CATALOG[0];
   const stage = makeNewStage(spec.id);
   if (stage) return { ...stage, ...spec };
   if (GEOMETRY_CATALOG.some((item) => item.id === spec.id))

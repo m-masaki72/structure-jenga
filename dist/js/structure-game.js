@@ -275,20 +275,31 @@ export function readRecords(storage) {
     return {};
   }
 }
+// 目標を達成して完成させたことがあるか。cleared を持たない古い記録は本数から推定する
+export const recordCleared = (record, target) =>
+  Boolean(record) && (record.cleared ?? record.count >= target);
 export function saveRecord(storage, game) {
   if (game.status === 'playing') return { saved: false, best: false };
   try {
     const records = readRecords(storage),
       key = recordKey(game.structure.id, game.mode);
-    const stats = game.stats;
-    const best = !records[key] || records[key].score < stats.score;
-    if (best) {
+    const stats = game.stats,
+      previous = records[key];
+    const best = !previous || previous.score < stats.score;
+    const cleared =
+      recordCleared(previous, game.structure.target) || (game.status === 'finished' && stats.cleared);
+    if (best || cleared !== previous.cleared) {
       records[key] = {
-        score: stats.score,
-        count: stats.count,
-        useful: stats.useful,
-        seed: game.seed,
-        date: new Date().toISOString(),
+        ...(best
+          ? {
+              score: stats.score,
+              count: stats.count,
+              useful: stats.useful,
+              seed: game.seed,
+              date: new Date().toISOString(),
+            }
+          : previous),
+        cleared,
       };
       storage.setItem(SAVE_KEY, JSON.stringify(records));
     }
