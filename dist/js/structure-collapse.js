@@ -70,8 +70,9 @@ function segmentDistance(a, b, c, d) {
 let initialization;
 
 export class StructureCollapse {
-  static async init() {
-    initialization ??= RAPIER.init();
+  // source は WASM のバイト列（Node のテスト用）。省略時は dist/vendor/rapier.wasm を読む
+  static async init(source) {
+    initialization ??= RAPIER.init(source);
     await initialization;
   }
 

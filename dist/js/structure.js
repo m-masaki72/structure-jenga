@@ -11,7 +11,6 @@ import { StructureAudio } from './structure-audio.js';
 import { StructureCaptions } from './structure-captions.js';
 import { CHAPTERS } from './structure-stages.js';
 import { StructureView } from './structure-view.js';
-import { StructureCollapse } from './structure-collapse.js';
 import { dailySeed, jstDay } from './structure-motion.js';
 import { rankingEnabled, fetchBoard, submitScore } from './ranking.js';
 import {
@@ -1008,7 +1007,6 @@ document.addEventListener('keydown', (event) => {
 });
 
 try {
-  await StructureCollapse.init();
   view = new StructureView($('structure-viewport'), select, (impact) => {
     try {
       audio.impact(impact);
@@ -1021,6 +1019,9 @@ try {
   ready = true;
   $('loading').hidden = true;
   update();
+  // 崩壊の物理は、手が空いたときに先読みしておく
+  const idle = window.requestIdleCallback ?? ((callback) => setTimeout(callback, 500));
+  idle(() => view.loadPhysics().catch((error) => console.error(error)), { timeout: 3000 });
   view.renderer.domElement.addEventListener('webglcontextlost', (event) => {
     event.preventDefault();
     ready = false;
@@ -1037,16 +1038,19 @@ try {
     window.dispatchEvent(new Event('structure-render-restored'));
   });
   let previousFrame = performance.now();
+  let lastRender = 0;
   function frame(now) {
     const limit = game.mode === 'limit';
-    // 限界モードは遅い端末でも持ち時間が実時間に近くなるよう、1フレームの上限を広げる
-    const dt = Math.min(limit ? 0.1 : 0.05, Math.max(0, (now - previousFrame) / 1000));
+    // 限界モードは遅い端末でも持ち時間が実時間どおり減るよう、1フレームの上限を広げる。
+    // 判定は固定 STEP で刻むので、1フレームで何 STEP 進んでも結果は同じ
+    const dt = Math.min(limit ? 0.5 : 0.05, Math.max(0, (now - previousFrame) / 1000));
     previousFrame = now;
     requestAnimationFrame(frame);
     if (!ready || document.hidden) return;
     try {
       // 限界モードはメニューを開いても止めない（考える時間も持ち時間のうち）
-      const paused = !limit && Boolean(document.querySelector('dialog[open]'));
+      const dialog = Boolean(document.querySelector('dialog[open]'));
+      const paused = !limit && dialog;
       if (countdown) {
         countdown = Math.max(0, countdown - dt);
         updateCountdown();
@@ -1055,7 +1059,10 @@ try {
         if (game.status === 'playing') view.followAnalysis(game.result, game.sway);
         if (limit) updateTimer();
       }
-      view.frame(now / 1000);
+      // ダイアログの裏は 20fps に落とす（描画の上限 0.05 秒に合わせ、崩壊の物理は遅れない）
+      if (dialog && now - lastRender < 50) return;
+      lastRender = now;
+      view.frame(now / 1000, !dialog);
       drawWave(now / 1000);
     } catch (error) {
       ready = false;

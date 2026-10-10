@@ -154,10 +154,13 @@ export function makeLandscape(scene, renderer, reducedMotion) {
     );
   };
   grassMaterial.customProgramCacheKey = () => 'structure-grass-1';
-  const grass = new THREE.InstancedMesh(blade, grassMaterial, LITE ? 7000 : 16000);
+  const blades = LITE ? 7000 : 16000;
+  const grass = new THREE.InstancedMesh(blade, grassMaterial, blades);
   const transform = new THREE.Object3D();
   const grassColor = new THREE.Color();
-  for (let i = 0; i < grass.count; i++) {
+  // 台座と小道に掛かる草は置かずに詰める。並びはばらばらなので、count を減らしても一様に間引ける
+  let planted = 0;
+  for (let i = 0; i < blades; i++) {
     const radius = 4.4 + Math.pow(rand(), 2) * 32;
     const angle = rand() * Math.PI * 2;
     const x = Math.cos(angle) * radius,
@@ -169,10 +172,12 @@ export function makeLandscape(scene, renderer, reducedMotion) {
     const size = inFoundation || inPath ? 0 : 0.035 + rand() * 0.075;
     transform.scale.set(size * (1.2 + rand()), size, size);
     transform.updateMatrix();
-    grass.setMatrixAt(i, transform.matrix);
     grassColor.setHSL(0.17 + rand() * 0.055, 0.2 + rand() * 0.15, 0.26 + rand() * 0.12);
-    grass.setColorAt(i, grassColor);
+    if (!size) continue;
+    grass.setMatrixAt(planted, transform.matrix);
+    grass.setColorAt(planted++, grassColor);
   }
+  grass.count = planted;
   grass.receiveShadow = true;
   grass.frustumCulled = false;
   scene.add(grass);
@@ -200,6 +205,7 @@ export function makeLandscape(scene, renderer, reducedMotion) {
       return environment;
     },
     grass,
+    grassTotal: planted,
     sun,
     restore: bakeEnvironment,
     update(time) {

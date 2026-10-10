@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { StructureGame } from '../../dist/js/structure-game.js';
 import { StructureCollapse } from '../../dist/js/structure-collapse.js';
 
-await StructureCollapse.init();
+await StructureCollapse.init(await readFile(new URL('../../dist/vendor/rapier.wasm', import.meta.url)));
 
 function failedGame(level) {
   const game = new StructureGame(level, { seed: 17 });

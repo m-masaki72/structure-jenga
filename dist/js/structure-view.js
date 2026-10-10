@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from '../vendor/addons/controls/OrbitControls.js';
-import { StructureCollapse } from './structure-collapse.js';
 import { CollapseEffects, collisionStrength } from './structure-effects.js';
 import { architecturalMaterials, timberGeometry, columnGeometry } from './structure-architecture.js';
 import { MemberAffordance } from './structure-affordance.js';
@@ -11,6 +10,23 @@ const Y = new THREE.Vector3(0, 1, 0);
 const point = (p) => new THREE.Vector3(...p);
 const ease = (t) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
 const COLLAPSE_SETTLE_SECONDS = 10;
+// 画質の段階。重い端末では実行中に一段ずつ落とす（戻すと行き来するので戻さない）
+const QUALITY = [
+  { pixelRatio: 1.7, grass: 1 },
+  { pixelRatio: 1.25, grass: 1 },
+  { pixelRatio: 1, grass: 0.5 },
+  { pixelRatio: 0.75, grass: 0.25 },
+];
+
+// GPU を使わないソフトウェア描画（SwiftShader など）か。そうなら MSAA を切り、画質を下げて始める
+function softwareRenderer() {
+  const gl = document.createElement('canvas').getContext('webgl2');
+  if (!gl) return false;
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  const name = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+  gl.getExtension('WEBGL_lose_context')?.loseContext();
+  return /swiftshader|llvmpipe|software/i.test(name);
+}
 
 export class StructureView {
   constructor(host, onSelect, onImpact = () => {}) {
@@ -22,11 +38,14 @@ export class StructureView {
     this.candidates = [];
     this.hovered = null;
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const software = softwareRenderer();
+    this.quality = software ? 2 : 0;
+    this.frameTimes = [];
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: !software,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
+    this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.setClearColor('#cbd8d9');
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.82;
@@ -71,7 +90,6 @@ export class StructureView {
     this.detailTransform = new THREE.Object3D();
     this.detailOffset = new THREE.Vector3();
     this.instanceTransform = new THREE.Object3D();
-    this.hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
     this.highlightColor = new THREE.Color();
     this.familyColors = new Map(
       Object.entries({
@@ -128,13 +146,56 @@ export class StructureView {
     this.bind();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
+    this.setQuality(this.quality);
     this.resize();
+  }
+  pixelRatio() {
+    return Math.min(devicePixelRatio, QUALITY[this.quality].pixelRatio);
+  }
+  setQuality(level) {
+    this.quality = level;
+    this.landscape.grass.count = Math.round(this.landscape.grassTotal * QUALITY[level].grass);
+    this.renderer.setPixelRatio(this.pixelRatio());
+  }
+  // 2 秒ぶんのフレーム間隔の中央値が 40ms（25fps 未満）なら、画質を一段落とす
+  adapt(delta) {
+    if (!(delta > 0 && delta < 0.5) || this.quality >= QUALITY.length - 1) return;
+    this.frameTimes.push(delta);
+    if (this.frameTimes.reduce((sum, value) => sum + value, 0) < 2) return;
+    const median = this.frameTimes.sort((a, b) => a - b)[this.frameTimes.length >> 1];
+    this.frameTimes = [];
+    if (median > 0.04) this.setQuality(this.quality + 1);
+  }
+  // 崩壊の物理（Rapier）は崩れたときにしか使わないので、初回描画のあとで読み込む
+  loadPhysics() {
+    this.physicsLoading ??= import('./structure-collapse.js')
+      .then(async ({ StructureCollapse }) => {
+        await StructureCollapse.init();
+        this.Collapse = StructureCollapse;
+      })
+      .catch((error) => {
+        // 次に崩れたときに読み直せるようにしておく
+        this.physicsLoading = null;
+        throw error;
+      });
+    return this.physicsLoading;
+  }
+  batches() {
+    return [
+      this.beamBatch,
+      this.columnBatch,
+      this.ghostBatch,
+      this.ghostColumnBatch,
+      this.jointBatch,
+      this.plateBatch,
+      this.pegBatch,
+    ];
   }
   addStudio() {
     this.landscape = makeLandscape(this.scene, this.renderer, this.reducedMotion);
     this.plinth = this.landscape.plinth;
   }
-  updateConnections(id, mesh, visible) {
+  updateConnections(mesh) {
     const radius = mesh.scale.x;
     const transform = this.detailTransform;
     transform.quaternion.copy(mesh.quaternion);
@@ -143,31 +204,20 @@ export class StructureView {
       const sign = end ? 1 : -1;
       const y = sign * (mesh.scale.y * 0.5 - radius * 0.04);
       const column = mesh.userData.profile.column;
-      const put = (batch, index, x, offsetY, z, show) => {
-        if (!visible || !show) return batch.setMatrixAt(index, this.hiddenMatrix);
+      const put = (batch, x, offsetY, z) => {
         this.detailOffset.set(x * radius, offsetY, z * radius).applyQuaternion(mesh.quaternion);
         transform.position.copy(mesh.position).add(this.detailOffset);
         transform.updateMatrix();
-        batch.setMatrixAt(index, transform.matrix);
+        batch.setMatrixAt(batch.count++, transform.matrix);
       };
-      put(this.plateBatch, id * 2 + end, 0, y, 0, column);
-      for (let peg = 0; peg < 2; peg++) {
-        put(this.pegBatch, id * 4 + end * 2 + peg, 0, y - sign * radius * 0.65, peg ? 0.7 : -0.7, !column);
-      }
+      if (column) put(this.plateBatch, 0, y, 0);
+      else
+        for (let peg = 0; peg < 2; peg++) put(this.pegBatch, 0, y - sign * radius * 0.65, peg ? 0.7 : -0.7);
     }
   }
   load(structure, analysis) {
-    this.failure?.physics.dispose();
-    for (const batch of [
-      this.beamBatch,
-      this.columnBatch,
-      this.ghostBatch,
-      this.ghostColumnBatch,
-      this.jointBatch,
-      this.plateBatch,
-      this.pegBatch,
-    ])
-      batch?.dispose();
+    this.failure?.physics?.dispose();
+    for (const batch of this.batches()) batch?.dispose();
     for (const child of this.assembly.children) if (child.userData.ownedGeometry) child.geometry.dispose();
     this.assembly.clear();
     this.meshes.clear();
@@ -221,15 +271,7 @@ export class StructureView {
       this.materials.joint,
       structure.members.length * 4,
     );
-    for (const batch of [
-      this.beamBatch,
-      this.columnBatch,
-      this.ghostBatch,
-      this.ghostColumnBatch,
-      this.jointBatch,
-      this.plateBatch,
-      this.pegBatch,
-    ]) {
+    for (const batch of this.batches()) {
       batch.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       batch.frustumCulled = false;
       this.assembly.add(batch);
@@ -251,13 +293,10 @@ export class StructureView {
         .normalize();
       mesh.userData.restRotation = new THREE.Quaternion().setFromUnitVectors(Y, mesh.userData.restDirection);
       this.meshes.set(member.id, mesh);
-      this.beamBatch.setMatrixAt(member.id, this.hiddenMatrix);
-      this.beamBatch.setColorAt(member.id, this.familyColors.get(member.family) ?? this.materials.beam.color);
-      this.columnBatch.setMatrixAt(member.id, this.hiddenMatrix);
-      this.columnBatch.setColorAt(member.id, this.materials.column.color);
-      this.ghostBatch.setMatrixAt(member.id, this.hiddenMatrix);
-      this.ghostColumnBatch.setMatrixAt(member.id, this.hiddenMatrix);
     }
+    // 色の配列を最初に用意しておく（中身は frame() で毎回書く）
+    this.beamBatch.setColorAt(0, this.materials.beam.color);
+    this.columnBatch.setColorAt(0, this.materials.column.color);
     structure.nodes.forEach((node) => {
       if (node.fixed && node.anchor !== false) {
         const anchor = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.46), this.materials.anchor);
@@ -349,7 +388,7 @@ export class StructureView {
   resize() {
     const { width, height } = this.host.getBoundingClientRect();
     if (width < 1 || height < 1) return;
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
+    this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
@@ -539,14 +578,14 @@ export class StructureView {
     else this.setAnalysis(result);
   }
   collapse(result, rotations = new Map([...this.meshes].map(([id, mesh]) => [id, mesh.quaternion.clone()]))) {
-    this.failure?.physics.dispose();
+    this.failure?.physics?.dispose();
     this.effects.reset();
     const from = this.positions.map((p) => p.clone());
-    this.failure = {
+    const failure = (this.failure = {
       result,
       from,
       rotations,
-      physics: new StructureCollapse(this.structure, this.removed, from, result, rotations),
+      physics: null,
       lastFrame: performance.now() / 1000,
       cameraStart: this.camera.position.clone(),
       cameraFocus: this.controls.target.clone(),
@@ -560,7 +599,15 @@ export class StructureView {
       age: 0,
       peakShock: 0,
       impacts: 0,
+    });
+    // 物理がまだ読み込めていなければ、読み込めるまで崩れ始めの姿勢で待つ
+    const start = () => {
+      if (this.failure !== failure) return;
+      failure.physics = new this.Collapse(this.structure, this.removed, from, result, rotations);
+      failure.lastFrame = performance.now() / 1000;
     };
+    if (this.Collapse) start();
+    else this.loadPhysics().then(start, (error) => console.error(error));
   }
   replay() {
     if (!this.failure) return;
@@ -572,7 +619,7 @@ export class StructureView {
     this.collapse(result, rotations);
   }
   collapseStats() {
-    if (!this.failure) return null;
+    if (!this.failure?.physics) return null;
     const f = this.failure;
     const indices = this.structure.nodes.flatMap((node, i) => (node.fixed ? [] : [i]));
     return {
@@ -587,12 +634,14 @@ export class StructureView {
       peakOffset: f.peakOffset,
     };
   }
-  frame(time) {
+  // sample が false のとき（ダイアログの裏で間引いているとき）は、画質の判定に使わない
+  frame(time, sample = true) {
     if (!this.structure) return;
+    if (sample) this.adapt(time - (this.lastFrame ?? time));
     const frameDelta = Math.min(0.05, Math.max(0, time - (this.lastFrame ?? time)));
     this.lastFrame = time;
     let falling;
-    if (this.failure) {
+    if (this.failure?.physics) {
       const f = this.failure,
         dt = Math.min(0.05, Math.max(0, time - f.lastFrame));
       f.lastFrame = time;
@@ -639,7 +688,7 @@ export class StructureView {
       this.collapseVignette.style.opacity = String(
         this.reducedMotion ? 0 : Math.min(0.55, f.shock * 0.35 + f.quake * 0.18),
       );
-    } else {
+    } else if (!this.failure) {
       if (this.liveAnalysis) {
         this.positions.forEach((p, i) => p.lerp(this.to[i], 1 - Math.exp(-frameDelta * 12)));
       } else {
@@ -647,19 +696,15 @@ export class StructureView {
         this.positions.forEach((p, i) => p.lerpVectors(this.from[i], this.to[i], t));
       }
     }
+    // インスタンスは見えるものだけを前から詰めて書き、count で描く数を絞る（隠すぶんの頂点処理を省く）
+    for (const batch of this.batches()) batch.count = 0;
     this.positions.forEach((p, i) => {
-      if (
-        this.structure.nodes[i].anchor === false &&
-        this.nodeMembers[i].every((id) => this.removed.has(id))
-      ) {
-        this.jointBatch.setMatrixAt(i, this.hiddenMatrix);
+      if (this.structure.nodes[i].anchor === false && this.nodeMembers[i].every((id) => this.removed.has(id)))
         return;
-      }
       this.instanceTransform.position.copy(p);
       this.instanceTransform.updateMatrix();
-      this.jointBatch.setMatrixAt(i, this.instanceTransform.matrix);
+      this.jointBatch.setMatrixAt(this.jointBatch.count++, this.instanceTransform.matrix);
     });
-    this.jointBatch.instanceMatrix.needsUpdate = true;
     for (const [id, mesh] of this.meshes) {
       if (this.removed.has(id)) continue;
       const member = mesh.userData.member;
@@ -711,14 +756,16 @@ export class StructureView {
         mesh.scale.x = mesh.scale.z = mesh.userData.profile.radius * scale;
       }
     }
-    for (const [id, mesh] of this.meshes) {
+    for (const mesh of this.meshes.values()) {
+      if (!mesh.visible) continue;
       mesh.updateMatrix();
-      const ghost = mesh.visible && mesh.material === this.materials.ghost;
       const column = mesh.userData.profile.column;
-      this.beamBatch.setMatrixAt(id, mesh.visible && !ghost && !column ? mesh.matrix : this.hiddenMatrix);
-      this.columnBatch.setMatrixAt(id, mesh.visible && !ghost && column ? mesh.matrix : this.hiddenMatrix);
-      this.ghostBatch.setMatrixAt(id, ghost && !column ? mesh.matrix : this.hiddenMatrix);
-      this.ghostColumnBatch.setMatrixAt(id, ghost && column ? mesh.matrix : this.hiddenMatrix);
+      if (mesh.material === this.materials.ghost) {
+        const ghost = column ? this.ghostColumnBatch : this.ghostBatch;
+        ghost.setMatrixAt(ghost.count++, mesh.matrix);
+        continue;
+      }
+      const batch = column ? this.columnBatch : this.beamBatch;
       const baseColor = column
         ? this.materials.column.color
         : (this.familyColors.get(mesh.userData.member.family) ?? this.materials.beam.color);
@@ -727,19 +774,11 @@ export class StructureView {
       if (mesh.material === this.materials.selected) color.lerp(this.materials.selected.color, 0.24);
       else if (mesh.material === this.materials.hover && this.interactive)
         color.lerp(this.materials.hover.color, 0.28);
-      this.beamBatch.setColorAt(id, color);
-      this.columnBatch.setColorAt(id, color);
-      this.updateConnections(id, mesh, mesh.visible && !ghost);
+      batch.setColorAt(batch.count, color);
+      batch.setMatrixAt(batch.count++, mesh.matrix);
+      this.updateConnections(mesh);
     }
-    for (const batch of [
-      this.beamBatch,
-      this.columnBatch,
-      this.ghostBatch,
-      this.ghostColumnBatch,
-      this.plateBatch,
-      this.pegBatch,
-    ])
-      batch.instanceMatrix.needsUpdate = true;
+    for (const batch of this.batches()) batch.instanceMatrix.needsUpdate = true;
     this.beamBatch.instanceColor.needsUpdate = this.columnBatch.instanceColor.needsUpdate = true;
     this.ghostBatch.visible = this.ghostColumnBatch.visible = this.showOriginal && this.removed.size > 0;
     if (this.pulse.visible) {

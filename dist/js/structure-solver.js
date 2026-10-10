@@ -118,7 +118,7 @@ export function prepareAnalysis(structure, removed = new Set()) {
       maxDisplacement: Infinity,
       mass: masses.reduce((a, b) => a + b, 0),
     });
-  const evaluate = ([windX = 0, windZ = 0] = []) => {
+  const load = ([windX = 0, windZ = 0] = []) => {
     const rhs = new Float64Array(size);
     nodes.forEach((node, i) => {
       const gravity = masses[i] * 9.81;
@@ -126,6 +126,10 @@ export function prepareAnalysis(structure, removed = new Set()) {
       if (node.force) for (let j = 0; j < 3; j++) force[j] += node.force[j];
       for (let j = 0; j < 3; j++) if (dofs[i][j] >= 0) rhs[dofs[i][j]] = force[j];
     });
+    return rhs;
+  };
+  const evaluate = (wind) => {
+    const rhs = load(wind);
     const flat = solve(decomposition.lower, rhs);
     const result = measure(expand(flat));
     // 残差は検証用。毎ステップ O(n²) を払わないよう、読まれたときだけ計算する
@@ -177,6 +181,8 @@ export function prepareAnalysis(structure, removed = new Set()) {
     };
   };
   evaluate.measure = measure;
+  // 変位だけが要るとき（揺れの毎ステップ）は、部材ごとの力の集計を省く
+  evaluate.displacement = (wind) => expand(solve(decomposition.lower, load(wind)));
   return evaluate;
 }
 

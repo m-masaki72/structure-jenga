@@ -122,12 +122,13 @@ export class StructureGame {
       this.time += STEP;
       this.steps++;
       this.sway = this.swayAt(this.time);
-      const target = this.evaluate(this.sway);
-      if (target.reason === 'mechanism') {
-        this.fail(target);
+      // 機構（剛性行列が特異）なら変位を解けないので、その場で崩れる
+      if (!this.evaluate.displacement) {
+        this.fail(this.evaluate(this.sway));
         events.push({ type: 'collapsed' });
         break;
       }
+      const target = this.evaluate.displacement(this.sway);
       const previousDemand = Math.max(
         this.result.maxUtilization,
         this.result.maxDisplacement / (this.structure.displacementLimit ?? 0.045),
@@ -135,7 +136,7 @@ export class StructureGame {
       const damping = 3.2 + 3.8 * Math.min(1, previousDemand) ** 3;
       this.displacement.forEach((p, i) =>
         p.forEach((value, axis) => {
-          const acceleration = (target.displacement[i][axis] - value) * 18 - this.velocity[i][axis] * damping;
+          const acceleration = (target[i][axis] - value) * 18 - this.velocity[i][axis] * damping;
           this.velocity[i][axis] += acceleration * STEP;
           p[axis] += this.velocity[i][axis] * STEP;
         }),
