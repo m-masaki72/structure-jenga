@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { replayRound } from '../../dist/js/structure-game.js';
 import { dailyLevel } from '../../dist/js/structure-levels.js';
 
+const DAILY_DAY = '2026-01-05';
+
 const canonical = 'https://structure-jenga.morilab-garage.com/';
 async function openGame(page) {
   await page.goto('/?seed=17');
@@ -176,8 +178,17 @@ test('architecture and audio preferences survive a fresh page', async ({ page, c
 
 test('limit mode runs a daily round through dialogs and submits it to the ranking', async ({ page }) => {
   test.setTimeout(300000);
-  // 今日の構造は日替わりで重いこともある。ソフトウェア描画では 1 フレームで進む時間に上限があるので、
-  // 画面を小さくして描画を軽くし、待ち時間にも余裕を持たせる
+  // 今日の構造は日替わりで重さが変わる。テストは日付をずらし、いちばん軽い「小さな門」の日で遊ぶ。
+  // page.clock はページのタイマーまで巻き込んで遅くなるので、Date.now だけをずらす
+  await page.addInitScript(
+    (target) => {
+      const offset = target - Date.now(),
+        now = Date.now;
+      Date.now = () => now() + offset;
+    },
+    Date.parse(`${DAILY_DAY}T12:00:00+09:00`),
+  );
+  // ソフトウェア描画は画面が大きいほど遅く、限界モードは 1 フレームで進む時間に上限があるので小さく描く
   await page.setViewportSize({ width: 640, height: 480 });
   const endpoint = 'https://ranking.test';
   const posted = [];
@@ -218,7 +229,9 @@ test('limit mode runs a daily round through dialogs and submits it to the rankin
   await page.locator('#daily-start').click();
   const snapshot = () => page.evaluate(() => window.structureStudy.snapshot());
   expect((await snapshot()).mode).toBe('limit');
-  expect((await snapshot()).level).toBe(dailyLevel((await snapshot()).day));
+  expect((await snapshot()).day).toBe(DAILY_DAY);
+  expect((await snapshot()).level).toBe(dailyLevel(DAILY_DAY));
+  expect(dailyLevel(DAILY_DAY)).toBe('gate');
   await expect(page.locator('#limit-timer')).toBeVisible();
 
   // 限界モードはダイアログを開いても時間が進む
