@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f4f2e9" />
+    <!-- importmap のハッシュとランキング Worker の URL は tests/unit/test-csp.mjs が照合する -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'sha256-X4R5Tb+WaZW6mKIg2Gw4ZZeSy+753BrbObE61vERnGs=' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://structure-jenga-ranking.m-masaki7272.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
 
     <title>LESS, STILL. — 構造分解</title>
 

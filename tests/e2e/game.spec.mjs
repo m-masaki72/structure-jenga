@@ -41,6 +41,9 @@ test('game starts without API or external asset requests', async ({ page }, test
     if (response.status() >= 400) failures.push(response.url());
   });
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.text().includes('Content Security Policy')) errors.push(message.text());
+  });
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (
@@ -150,13 +153,12 @@ test('limit mode runs a daily round through dialogs and submits it to the rankin
   test.setTimeout(150000);
   const endpoint = 'https://ranking.test';
   const posted = [];
-  // ランキング Worker の URL を差し込み、Worker 自体はモックする
+  // ランキング Worker の URL（endpoint の meta と CSP）を差し替え、Worker 自体はモックする
   await page.route('**/index.html', async (route) => {
     const response = await route.fetch();
-    const html = (await response.text()).replace(
-      /<meta name="ranking-endpoint" content="[^"]*" \/>/,
-      `<meta name="ranking-endpoint" content="${endpoint}" />`,
-    );
+    const source = await response.text();
+    const deployed = source.match(/<meta name="ranking-endpoint" content="([^"]+)"/)[1];
+    const html = source.replaceAll(deployed, endpoint);
     await route.fulfill({ response, body: html });
   });
   await page.route(`${endpoint}/**`, async (route) => {
