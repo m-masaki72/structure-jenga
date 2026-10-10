@@ -3,26 +3,42 @@ import { prepareAnalysis } from './structure-solver.js';
 import { makeStructure } from './structure-levels.js';
 import { assembleRound, swayAt } from './structure-motion.js';
 
-const STEP = 1 / 30;
+export const STEP = 1 / 30;
+// 限界モード：持ち時間のあいだに揺れが強まっていく。崩れたら合計を割り引いて終了
+export const LIMIT_RULES = {
+  secondsPerTarget: 6,
+  swayGrowth: 0.6,
+  emptyPoints: 20,
+  edgeMultiplier: 1.2,
+  collapseKeep: 0.7,
+  finishBonusRate: 0.5,
+};
 
 export class StructureGame {
   constructor(level = 'spire', options = {}) {
     this.reset(level, options);
   }
-  reset(level = this.structure.id, { seed = Math.floor(Math.random() * 4294967296) } = {}) {
+  reset(level = this.structure.id, { seed = Math.floor(Math.random() * 4294967296), mode = 'classic' } = {}) {
     this.seed = seed >>> 0;
+    this.mode = mode === 'limit' ? 'limit' : 'classic';
     this.structure = makeStructure(level);
+    this.timeLimit = this.mode === 'limit' ? this.structure.target * LIMIT_RULES.secondsPerTarget : Infinity;
     this.environment = assembleRound(this.structure, this.seed);
     this.removed = new Set();
     this.history = [];
+    // ランキング送信時にサーバーで再現するための操作列（何ステップ目に何をしたか）
+    this.actions = [];
+    this.steps = 0;
     this.probes = 0;
     this.status = 'playing';
+    this.endReason = null;
     this.time = this.accumulator = this.overload = 0;
     this.strainPeak = 0;
     this.pending = this.failure = null;
     this.finishing = false;
+    this.finishRemaining = 0;
     this.lastRemoval = -Infinity;
-    this.sway = swayAt(this.environment, 0);
+    this.sway = this.swayAt(0);
     this.evaluate = prepareAnalysis(this.structure, this.removed);
     this.result = this.evaluate(this.sway);
     this.initial = this.result;
@@ -30,6 +46,20 @@ export class StructureGame {
     this.displacement = this.result.displacement.map((p) => [...p]);
     this.velocity = this.structure.nodes.map(() => [0, 0, 0]);
     if (!this.result.stable) throw new Error(`Initial structure is unstable: ${level}/${this.seed}`);
+  }
+  swayAt(time) {
+    const sway = swayAt(this.environment, time);
+    if (this.mode !== 'limit') return sway;
+    const growth = 1 + LIMIT_RULES.swayGrowth * Math.min(1, time / this.timeLimit);
+    return sway.map((value) => value * growth);
+  }
+  get timeLeft() {
+    return Math.max(0, this.timeLimit - this.time);
+  }
+  reward(share, meaningful) {
+    if (this.mode !== 'limit') return meaningful ? Math.round(100 + Math.min(150, share * 1000)) : 50;
+    // 上限を設けず、細くなった構造の重い一本ほど差がつくようにする（share 15% で通常と同じ 250）
+    return meaningful ? Math.round(100 + 150 * Math.log2(1 + (share * 1000) / 150)) : LIMIT_RULES.emptyPoints;
   }
   probe(id) {
     const member = this.result.members.get(id);
@@ -43,11 +73,13 @@ export class StructureGame {
       this.pending ||
       this.finishing ||
       !this.result.members.has(id) ||
-      this.result.members.get(id).foundation
+      this.result.members.get(id).foundation ||
+      this.time >= this.timeLimit
     )
       return null;
     const before = this.result;
     const member = before.members.get(id);
+    this.actions.push({ step: this.steps, id });
     this.removed.add(id);
     this.lastRemoval = this.time;
     this.strainPeak = 0;
@@ -55,7 +87,7 @@ export class StructureGame {
     const after = this.evaluate(this.sway);
     const share = member.energy / Math.max(this.initial.energy, 1e-10);
     const meaningful = share >= 0.003;
-    const reward = meaningful ? Math.round(100 + Math.min(150, share * 1000)) : 50;
+    const reward = this.reward(share, meaningful);
     const entry = { id, meaningful, points: 0, stable: false, pending: true, mass: after.mass };
     this.history.push(entry);
     this.pending = { entry, reward, before, until: this.time + 3.2 };
@@ -70,7 +102,8 @@ export class StructureGame {
       pending.entry.pending = false;
       pending.entry.stable = false;
       pending.entry.points = 0;
-    } else if (last) {
+    } else if (last && this.mode !== 'limit') {
+      // 限界モードは崩壊を合計の割引で罰するので、確定済みの一本は取り消さない
       last.stable = false;
       last.points = 0;
     }
@@ -87,7 +120,8 @@ export class StructureGame {
     while (this.accumulator + 1e-10 >= STEP && this.status === 'playing') {
       this.accumulator -= STEP;
       this.time += STEP;
-      this.sway = swayAt(this.environment, this.time);
+      this.steps++;
+      this.sway = this.swayAt(this.time);
       const target = this.evaluate(this.sway);
       if (target.reason === 'mechanism') {
         this.fail(target);
@@ -125,11 +159,13 @@ export class StructureGame {
       if (current.stable) this.lastSafe = current;
       if (this.pending && this.time >= this.pending.until && current.stable && this.overload === 0) {
         const { entry, reward } = this.pending;
+        const heldOn = this.strainPeak > 0.95;
         entry.pending = false;
         entry.stable = true;
-        entry.points = reward;
+        entry.edge = this.mode === 'limit' && heldOn && entry.meaningful;
+        entry.points = entry.edge ? Math.round(reward * LIMIT_RULES.edgeMultiplier) : reward;
         this.pending = null;
-        events.push({ type: 'settled', entry, heldOn: this.strainPeak > 0.95 });
+        events.push({ type: 'settled', entry, heldOn });
         this.strainPeak = 0;
       } else if (!this.pending && this.strainPeak > 1 && demand < 0.8 && this.overload === 0) {
         events.push({ type: 'recovered' });
@@ -143,16 +179,31 @@ export class StructureGame {
         this.time >= this.finishAt
       ) {
         this.status = 'finished';
+        this.endReason = 'finish';
         this.finishing = false;
         events.push({ type: 'finished' });
+      } else if (
+        this.time >= this.timeLimit &&
+        !this.finishing &&
+        !this.pending &&
+        current.stable &&
+        this.overload === 0
+      ) {
+        // 時間切れ。判定中の一本があれば、その結果が出てから締める
+        this.status = 'finished';
+        this.endReason = 'timeout';
+        events.push({ type: 'finished', timeout: true });
       }
     }
     return events;
   }
   finish() {
     if (this.status !== 'playing' || this.pending || this.finishing || !this.stats.count) return false;
+    if (this.time >= this.timeLimit) return false;
+    this.actions.push({ step: this.steps, finish: true });
     this.finishing = true;
     this.finishAt = this.time + this.environment.period;
+    this.finishRemaining = this.timeLeft;
     return true;
   }
   get stats() {
@@ -160,13 +211,26 @@ export class StructureGame {
     const useful = safe.filter((entry) => entry.meaningful).length;
     const base = safe.reduce((sum, entry) => sum + entry.points, 0);
     const reduction = Math.max(0, 1 - (safe.at(-1)?.mass ?? this.initial.mass) / this.initial.mass);
-    const finishBonus = this.status === 'finished' ? Math.round(base * (0.15 + Math.min(0.4, reduction))) : 0;
+    let finishBonus = 0,
+      score;
+    if (this.mode === 'limit') {
+      if (this.status === 'finished' && this.endReason === 'finish')
+        finishBonus = Math.round(
+          ((base * this.finishRemaining) / this.timeLimit) * LIMIT_RULES.finishBonusRate,
+        );
+      score = this.status === 'collapsed' ? Math.round(base * LIMIT_RULES.collapseKeep) : base + finishBonus;
+    } else {
+      if (this.status === 'finished') finishBonus = Math.round(base * (0.15 + Math.min(0.4, reduction)));
+      score = base + finishBonus;
+    }
     return {
       count: safe.length,
       useful,
       empty: safe.length - useful,
+      edge: safe.filter((entry) => entry.edge).length,
       reduction,
-      score: base + finishBonus,
+      score,
+      timeLeft: this.timeLeft,
       margin: this.result.margin,
       remaining: this.structure.members.length - this.removed.size,
       cleared: safe.length >= this.structure.target,
@@ -176,6 +240,23 @@ export class StructureGame {
 }
 
 export { SAVE_KEY };
+export const recordKey = (level, mode = 'classic') => (mode === 'limit' ? `limit:${level}` : level);
+
+// 操作列からラウンドを再現する（ランキングのサーバー側検証用）。不正な操作があれば null
+export function replayRound(level, seed, mode, actions, { maxSteps = 60 * 60 * 30 } = {}) {
+  const game = new StructureGame(level, { seed, mode });
+  let previous = -1;
+  for (const action of actions) {
+    if (!Number.isInteger(action.step) || action.step < previous || action.step > maxSteps) return null;
+    previous = action.step;
+    while (game.steps < action.step && game.status === 'playing') game.advance(STEP);
+    if (game.steps !== action.step) return null;
+    const ok = action.finish ? game.finish() : game.remove(action.id);
+    if (!ok) return null;
+  }
+  while (game.status === 'playing' && game.steps < maxSteps) game.advance(STEP);
+  return game.status === 'playing' ? null : game;
+}
 export function readRecords(storage) {
   try {
     const records = JSON.parse(storage.getItem(SAVE_KEY) ?? '{}');
@@ -198,7 +279,7 @@ export function saveRecord(storage, game) {
   if (game.status === 'playing') return { saved: false, best: false };
   try {
     const records = readRecords(storage),
-      key = game.structure.id;
+      key = recordKey(game.structure.id, game.mode);
     const stats = game.stats;
     const best = !records[key] || records[key].score < stats.score;
     if (best) {
