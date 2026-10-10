@@ -8,11 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Requires Node.js 24+ and Python 3.
+Requires Node.js 24+.
 
 - `npm ci` — install
-- `npm start` — serve `dist/` at http://127.0.0.1:8770 (`tools/serve.mjs`; Windows の python http.server は .js を text/plain で返すので使わない)
-- `npm run verify` — syntax check (`node --check` on every `dist/js/*.js`) + ESLint + Prettier check + unit tests. This is what CI runs before E2E.
+- `npm start` — serve `dist/` at http://127.0.0.1:8770 via `tools/serve.mjs` (do not use python http.server: on Windows it serves .js as text/plain and the game fails to boot)
+- `npm run verify` — syntax check (`node --check` on every `dist/js/*.js`) + ESLint + Prettier check + `vendor:check` + unit tests. This is what CI runs before E2E.
+- `npm run vendor` — copy three/rapier from `node_modules` into `dist/vendor/` after bumping their versions (`vendor:check` fails if they drift).
 - `npm test` — unit tests (`node --test tests/unit/*.mjs`)
 - Single unit test: `node --test --test-name-pattern="<name>" tests/unit/test-structure.mjs`
 - `npm run format` — Prettier write
@@ -31,6 +32,7 @@ Logic layer (pure, no DOM/Three — unit-tested in Node by importing from `dist/
 
 - `structure-solver.js` — 3D frame/truss stiffness analysis. `prepareAnalysis(structure, removed)` returns an evaluator; results include `stable`, `reason` (`'mechanism'` = collapse), per-member forces/energy, displacement.
 - `structure-levels.js` (`CATALOG`, `makeStructure(id)`) assembles levels from `structure-stages.js` (stage order, chapters, hand-built stages) and `structure-geometry.js` (parametric shells/hyperboloids).
+- Members whose both ends are fully fixed carry no load; `makeStructure` marks them `foundation: true` outside the first chapter (`入門`), and they cannot be selected or removed. Changing stages can make `target` unreachable — the unit test `attainable target` checks this.
 - `structure-game.js` — `StructureGame` state machine (probe/remove, scoring by member energy share, pending-removal grace window, sway via `structure-motion.js` seeded RNG) and localStorage records (`SAVE_KEY` is versioned; bump it if the record format changes).
 - `structure-captions.js` / `structure-audio.js` / `structure-music.js` — sound impression text and Web Audio synthesis from member profiles.
 
@@ -43,4 +45,4 @@ The physics is a game approximation, not a real structural safety check.
 
 ## Deployment
 
-`.github/workflows/check.yml`: on every push runs `npm run verify` and E2E; on `main` it deploys `dist/` + `LICENSE` to GitHub Pages. If the public URL changes, update the URLs/share links in `dist/index.html`, plus `dist/sitemap.xml`, `robots.txt`, `404.html`.
+`.github/workflows/check.yml`: on pushes to `main` and on PRs runs `npm run verify` and E2E; on `main` it deploys `dist/` + `LICENSE` to GitHub Pages. If the public URL changes, update the URLs/share links in `dist/index.html`, plus `dist/sitemap.xml`, `robots.txt`, `404.html`.

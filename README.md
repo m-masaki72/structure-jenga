@@ -16,7 +16,7 @@
 
 ## 起動と検証
 
-Node.js 24以上とPython 3を使います。
+Node.js 24以上を使います。
 
 ```sh
 npm ci
@@ -58,7 +58,7 @@ favicon・OGP・JSON-LD・サイトマップ・404ページを同梱していま
 ## 別のPCで続ける
 
 このリポジトリをcloneして、`npm ci`、`npx playwright install chromium`、`npm start`を実行します。
-Python 3とNode.js 24以上が必要です。GitHub Pagesの公開にはSourceをGitHub Actionsに設定してください。
+Node.js 24以上が必要です。GitHub Pagesの公開にはSourceをGitHub Actionsに設定してください。
 初回の公開が失敗した場合は、設定後にActionsのCheckを再実行します。
 
 複数の3DゲームのE2Eは同時に実行せず、ゲームごとに順番に実行してください。
