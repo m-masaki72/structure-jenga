@@ -445,6 +445,21 @@ button.primary:hover:not(:disabled) {
 .settling .live-dot {
   animation: breathe 1s infinite;
 }
+.countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: 120px;
+  font-weight: 300;
+  color: #f4f2e9;
+  text-shadow: 0 2px 24px #24302080;
+  pointer-events: none;
+}
+.countdown[hidden] {
+  display: none;
+}
 .orbit-hint {
   position: absolute;
   left: 32px;
@@ -574,14 +589,14 @@ dialog .eyebrow {
   display: flex;
   flex-direction: column;
 }
-.setup-content {
+.settings-content {
   padding: 36px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-padding-block: 20px;
 }
-.setup-footer {
+.settings-footer {
   flex-shrink: 0;
   padding: 16px 36px 20px;
   border-top: 1px solid #d7dfcd;
@@ -666,7 +681,7 @@ dialog .eyebrow {
   padding: 14px;
   font-size: 12px;
 }
-.setup-note {
+.settings-note {
   text-align: center;
   font-size: 11px;
   margin: 8px 0 0;
@@ -790,6 +805,48 @@ dialog .eyebrow {
   color: #8c977c;
   display: block;
   margin-top: 7px;
+}
+.result-share {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.result-share h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.result-share textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fffdf6;
+  color: inherit;
+}
+.result-share-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.result-share-actions a,
+.result-share-actions button {
+  padding: 9px;
+  font-size: 12px;
+  text-align: center;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
 }
 .result-actions {
   display: grid;
@@ -922,13 +979,13 @@ dialog .eyebrow {
   background: #f1e0cf;
   border-color: #b98a69;
 }
-.setup-tabs {
+.settings-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   border-bottom: 1px solid var(--line);
   margin: 0 0 18px;
 }
-.setup-tabs button {
+.settings-tabs button {
   display: grid;
   gap: 3px;
   padding: 10px 6px 12px;
@@ -937,21 +994,21 @@ dialog .eyebrow {
   border-radius: 0;
   text-align: left;
 }
-.setup-tabs button:hover:not(:disabled) {
+.settings-tabs button:hover:not(:disabled) {
   background: transparent;
   border-bottom-color: #c4cdb9;
 }
-.setup-tabs strong {
+.settings-tabs strong {
   font-family: var(--serif);
   font-size: 18px;
   font-weight: 400;
 }
-.setup-tabs small {
+.settings-tabs small {
   font-size: 11px;
   color: #7c8974;
 }
-.setup-tabs [aria-selected='true'],
-.setup-tabs [aria-selected='true']:hover:not(:disabled) {
+.settings-tabs [aria-selected='true'],
+.settings-tabs [aria-selected='true']:hover:not(:disabled) {
   border-bottom-color: var(--ink);
 }
 #tab-daily[aria-selected='true'],
@@ -1068,6 +1125,12 @@ dialog .eyebrow {
   font-size: 22px;
   font-weight: 400;
   margin: 4px 0;
+}
+.daily-card small span {
+  white-space: nowrap;
+}
+.daily-card small span + span::before {
+  content: ' · ';
 }
 .daily-card small {
   font-size: 11px;
@@ -1351,10 +1414,10 @@ dialog .eyebrow {
   .settings-dialog {
     padding: 0;
   }
-  .setup-content {
+  .settings-content {
     padding: 29px 20px 23px;
   }
-  .setup-footer {
+  .settings-footer {
     padding: 14px 20px 12px;
   }
   .result-numbers {
@@ -1363,7 +1426,7 @@ dialog .eyebrow {
   .result-numbers strong {
     font-size: 30px;
   }
-  .setup-tabs strong {
+  .settings-tabs strong {
     font-size: 16px;
   }
   .continue-stage {
@@ -1440,20 +1503,20 @@ dialog .eyebrow {
   }
 }
 @media (max-height: 500px) {
-  .setup-content {
+  .settings-content {
     padding: 18px 24px;
   }
-  .setup-content > .eyebrow {
+  .settings-content > .eyebrow {
     display: none;
   }
   .settings-dialog h2 {
     font-size: 22px;
     margin: 0 0 12px;
   }
-  .setup-footer {
+  .settings-footer {
     padding: 10px 24px;
   }
-  .setup-note {
+  .settings-note {
     margin-top: 4px;
   }
 }

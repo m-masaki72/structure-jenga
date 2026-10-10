@@ -233,6 +233,10 @@ test('limit mode runs a daily round through dialogs and submits it to the rankin
   expect((await snapshot()).level).toBe(dailyLevel(DAILY_DAY));
   expect(dailyLevel(DAILY_DAY)).toBe('gate');
   await expect(page.locator('#limit-timer')).toBeVisible();
+  // 始まる前に 3・2・1 と数え、そのあいだは時間が減らない
+  await expect(page.locator('#countdown')).toBeVisible();
+  expect((await snapshot()).elapsed).toBe(0);
+  await expect(page.locator('#countdown')).toBeHidden({ timeout: 30000 });
 
   // 限界モードはダイアログを開いても時間が進む
   const before = (await snapshot()).timeLeft;
@@ -258,6 +262,11 @@ test('limit mode runs a daily round through dialogs and submits it to the rankin
   // 完成でも崩壊でも時間切れでも、結果画面とランキングが出る
   await expect(page.locator('#result-dialog')).toBeVisible({ timeout: 120000 });
   await expect(page.locator('#ranking')).toBeVisible();
+  await expect(page.locator('#share-text')).toHaveValue(new RegExp(`今日の限界 ${DAILY_DAY}\\n小さな門 `));
+  await expect(page.locator('#share-x')).toHaveAttribute(
+    'href',
+    /^https:\/\/twitter\.com\/intent\/tweet\?text=/,
+  );
   await expect(page.locator('#ranking-list li').first()).toContainText('<b>ちな</b>');
   await page.locator('#ranking-name').fill('テスト');
   await page.locator('#ranking-submit').click();

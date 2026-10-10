@@ -191,6 +191,7 @@
         <div class="settling" id="settling" hidden>
           <span class="live-dot"></span><span id="settling-label">まだ、揺れが戻ってくるかも。</span>
         </div>
+        <p class="countdown" id="countdown" role="status" hidden></p>
         <p class="orbit-hint">ドラッグで回転</p>
         <details id="view-menu" class="view-menu">
           <summary aria-label="視点と表示の操作">表示 <span aria-hidden="true">⌃</span></summary>
@@ -210,24 +211,24 @@
     </main>
     <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
       <button class="close-dialog" data-close="settings-dialog" aria-label="設定を閉じる">×</button>
-      <div id="setup-content" class="setup-content">
+      <div id="settings-content" class="settings-content">
         <p class="eyebrow">CHOOSE YOUR STRUCTURE</p>
         <h2 id="settings-title">構造を選ぶ</h2>
-        <div class="setup-tabs" role="tablist" aria-label="遊び方を選ぶ">
+        <div class="settings-tabs" role="tablist" aria-label="遊び方を選ぶ">
           <button id="tab-stages" role="tab" aria-controls="panel-stages" aria-selected="true">
             <strong>ステージ</strong><small>時間無制限・20の構造</small>
           </button>
           <button id="tab-daily" role="tab" aria-controls="panel-daily" aria-selected="false" tabindex="-1">
-            <strong>今日の限界</strong><small>制限時間つき・日替わりランキング</small>
+            <strong>今日の限界</strong><small>時間制限・日替わり</small>
           </button>
         </div>
-        <section id="panel-stages" class="setup-panel" role="tabpanel" aria-labelledby="tab-stages">
+        <section id="panel-stages" class="settings-panel" role="tabpanel" aria-labelledby="tab-stages">
           <p class="panel-lead">時間は無制限。音を聴きながら、目標の本数を抜いて「ここで完成」。</p>
           <button id="continue-stage" class="continue-stage primary" hidden></button>
           <div id="level-picker" class="stage-list"></div>
           <p class="assembly-note">同じかたちでも、組み付けと揺れは毎回少しずつ違います。</p>
         </section>
-        <section id="panel-daily" class="setup-panel" role="tabpanel" aria-labelledby="tab-daily" hidden>
+        <section id="panel-daily" class="settings-panel" role="tabpanel" aria-labelledby="tab-daily" hidden>
           <p class="panel-lead">
             限界モード。毎日ひとつの構造を、全員が同じ組み付けと揺れで。持ち時間の中で、崩れる手前まで抜く。
           </p>
@@ -248,9 +249,9 @@
           <p id="daily-reset" class="assembly-note"></p>
         </section>
       </div>
-      <footer id="daily-footer" class="setup-footer" hidden>
+      <footer id="daily-footer" class="settings-footer" hidden>
         <button id="daily-start" class="primary wide">挑戦する ↗</button>
-        <p class="setup-note">押すと持ち時間が減りはじめます。メニューを開いても止まりません。</p>
+        <p class="settings-note">3・2・1 のあと持ち時間が減りはじめます。メニューを開いても止まりません。</p>
       </footer>
     </dialog>
     <dialog id="sound-dialog" class="sound-dialog" aria-labelledby="sound-title">
@@ -360,6 +361,26 @@
         </div>
         <ol id="ranking-list" class="ranking-list"></ol>
         <p id="ranking-mine" class="ranking-mine"></p>
+      </section>
+      <section class="result-share" aria-labelledby="result-share-title">
+        <h3 id="result-share-title">結果を共有</h3>
+        <textarea id="share-text" rows="4" readonly aria-label="共有する文"></textarea>
+        <div class="result-share-actions">
+          <a
+            id="share-x"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="結果をXで共有（新しいタブで開く）"
+            >X ↗</a
+          ><a
+            id="share-line"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="結果をLINEで共有（新しいタブで開く）"
+            >LINE ↗</a
+          ><button id="share-copy">コピー</button>
+        </div>
+        <p id="share-copy-status" class="ranking-status" role="status"></p>
       </section>
       <div class="result-actions">
         <button id="result-next" class="primary" hidden>次のステージへ →</button>

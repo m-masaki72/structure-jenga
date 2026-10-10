@@ -84,12 +84,14 @@ window.addEventListener('pageshow', () => audio.setVisible(!document.hidden));
 let view,
   selected = null,
   locked = false,
+  // 限界モードの開始前カウントダウン（残り秒）。0 になるまで時計を止め、操作も受け付けない
+  countdown = 0,
   generation = 0,
   pulse = null,
   collapsing = false,
   ready = false;
 let saveResult = null;
-let setupTab = 'stages',
+let settingsTab = 'stages',
   noticeTimer;
 let board = null,
   boardTab = 'daily',
@@ -277,6 +279,14 @@ function updateTimer() {
   $('target-bar').style.width = `${(left / game.timeLimit) * 100}%`;
   $('records-open').classList.toggle('urgent', game.status === 'playing' && left < 10);
 }
+// 残り秒を 3・2・1 で見せ、0 になったら操作できる状態へ表示を戻す
+function updateCountdown() {
+  const shown = countdown ? String(Math.ceil(countdown)) : '';
+  if ($('countdown').textContent === shown) return;
+  $('countdown').textContent = shown;
+  $('countdown').hidden = !shown;
+  if (!shown) update();
+}
 function update() {
   const s = game.stats,
     limit = game.mode === 'limit';
@@ -312,7 +322,7 @@ function update() {
   }
   if (!game.history.length)
     $('beam-tray').innerHTML = '<span class="tray-empty">ここに、あなたの選択が並びます。</span>';
-  const canAct = ready && !locked && game.status === 'playing';
+  const canAct = ready && !locked && !countdown && game.status === 'playing';
   const member = selected === null ? null : game.result.members.get(selected);
   for (const id of [
     'help-open',
@@ -442,8 +452,14 @@ async function renderDaily() {
     key = `${level.id}:${day}`;
   $('daily-date').textContent = `${day} の構造 · ${level.chapter}`;
   $('daily-name').textContent = level.name;
-  $('daily-meta').textContent =
-    `持ち時間 ${level.target * LIMIT_RULES.secondsPerTarget}秒 · 目安 ${level.target}本 · 自己ベスト ${records()[recordKey(level.id, 'limit')]?.score?.toLocaleString() ?? '—'}`;
+  // 項目の途中で折り返さないよう、一項目ずつ包む
+  $('daily-meta').replaceChildren(
+    ...[
+      `持ち時間 ${level.target * LIMIT_RULES.secondsPerTarget}秒`,
+      `目安 ${level.target}本`,
+      `自己ベスト ${records()[recordKey(level.id, 'limit')]?.score?.toLocaleString() ?? '—'}`,
+    ].map((item) => Object.assign(document.createElement('span'), { textContent: item })),
+  );
   $('daily-preview').replaceChildren();
   $('daily-preview').insertAdjacentHTML('beforeend', previews.get(level.id));
   $('daily-reset').textContent = `次の構造まで、あと${untilTomorrow(day)}。`;
@@ -475,7 +491,7 @@ async function renderDaily() {
   }
 }
 function showTab(tab) {
-  setupTab = tab;
+  settingsTab = tab;
   for (const name of ['stages', 'daily']) {
     const active = name === tab;
     $(`tab-${name}`).setAttribute('aria-selected', String(active));
@@ -485,9 +501,9 @@ function showTab(tab) {
   $('daily-footer').hidden = tab !== 'daily';
   if (tab === 'daily') void renderDaily();
   else renderStages();
-  $('setup-content').scrollTop = 0;
+  $('settings-content').scrollTop = 0;
 }
-function openSetup(tab = game.mode === 'limit' ? 'daily' : 'stages') {
+function openSettings(tab = game.mode === 'limit' ? 'daily' : 'stages') {
   showTab(tab);
   $('settings-dialog').showModal();
 }
@@ -499,7 +515,7 @@ function startRound(level, nextMode) {
 
 async function select(id, candidates = []) {
   const member = game.result.members.get(id);
-  if (!ready || locked || game.status !== 'playing' || !member || member.foundation) return;
+  if (!ready || locked || countdown || game.status !== 'playing' || !member || member.foundation) return;
   selected = id;
   $('sound-impression').textContent = '耳をすませて…';
   $('view-menu').open = false;
@@ -549,7 +565,7 @@ async function probe() {
   update();
 }
 async function extract() {
-  if (selected === null || locked || game.status !== 'playing') return;
+  if (selected === null || locked || countdown || game.status !== 'playing') return;
   const id = selected;
   captions.cancel();
   const event = game.remove(id);
@@ -634,6 +650,8 @@ function restart(level = game.structure.id) {
   closeDialogs();
   collapsing = false;
   locked = false;
+  countdown = mode === 'limit' ? 3 : 0;
+  updateCountdown();
   selected = null;
   pulse = null;
   saveResult = null;
@@ -652,6 +670,27 @@ function restart(level = game.structure.id) {
   }
   update();
   $('structure-viewport').focus({ preventScroll: true });
+}
+const SITE_URL = document.querySelector('link[rel="canonical"]').href;
+// 抜いた順に一本ずつ印を並べる（ぎりぎり・荷重あり・軽い・崩れた一本）
+const removalMark = (entry) => (!entry.stable ? '🟥' : entry.edge ? '🟧' : entry.meaningful ? '🟩' : '⬜');
+function renderShare() {
+  const s = game.stats,
+    limit = game.mode === 'limit';
+  const ending =
+    game.status !== 'finished' ? '崩壊' : limit && game.endReason === 'timeout' ? '時間いっぱい' : '完成';
+  const text = [
+    limit ? `LESS, STILL. 今日の限界 ${roundDay}` : `LESS, STILL. ステージ${game.structure.number}`,
+    `${game.structure.name} ${s.score.toLocaleString()}pt · ${s.count}本 · ${ending}`,
+    game.history.map(removalMark).join(''),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  $('share-text').value = `${text}\n${SITE_URL}`;
+  $('share-x').href =
+    `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SITE_URL)}`;
+  $('share-line').href = `https://line.me/R/share?text=${encodeURIComponent(`${text}\n${SITE_URL}`)}`;
+  $('share-copy-status').textContent = '';
 }
 function showResult() {
   if (!saveResult) {
@@ -702,6 +741,7 @@ function showResult() {
       : 'このブラウザに自己ベストを保存しています。';
   $('result-view').textContent = finished ? '作品を見る' : '崩れたかたちを見る';
   $('result-replay').hidden = finished;
+  renderShare();
   showRanking();
   update();
   $('result-dialog').showModal();
@@ -844,9 +884,9 @@ $('deselect').addEventListener('click', () => {
   view.select(null);
   update();
 });
-$('settings-open').addEventListener('click', () => openSetup());
-$('structure-open').addEventListener('click', () => openSetup());
-$('daily-open').addEventListener('click', () => openSetup('daily'));
+$('settings-open').addEventListener('click', () => openSettings());
+$('structure-open').addEventListener('click', () => openSettings());
+$('daily-open').addEventListener('click', () => openSettings('daily'));
 $('tab-stages').addEventListener('click', () => showTab('stages'));
 $('tab-daily').addEventListener('click', () => showTab('daily'));
 $('settings-dialog')
@@ -854,8 +894,8 @@ $('settings-dialog')
   .addEventListener('keydown', (event) => {
     if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
     event.preventDefault();
-    showTab(setupTab === 'stages' ? 'daily' : 'stages');
-    $(`tab-${setupTab}`).focus();
+    showTab(settingsTab === 'stages' ? 'daily' : 'stages');
+    $(`tab-${settingsTab}`).focus();
   });
 $('continue-stage').addEventListener('click', () => startRound($('continue-stage').dataset.level, 'classic'));
 // 構造は restart がその日の構造に決める
@@ -874,6 +914,15 @@ $('guide-replay').addEventListener('click', () => {
 $('sound-open').addEventListener('click', () => $('sound-dialog').showModal());
 $('records-open').addEventListener('click', () => $('records-dialog').showModal());
 $('result-open').addEventListener('click', showResult);
+$('share-copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('share-text').value);
+    $('share-copy-status').textContent = 'コピーしました。';
+  } catch {
+    $('share-text').select();
+    $('share-copy-status').textContent = '選択した文をコピーしてください。';
+  }
+});
 $('restart').addEventListener('click', () => restart());
 for (const id of ['next-stage', 'result-next'])
   $(id).addEventListener('click', () => {
@@ -887,7 +936,7 @@ $('result-replay').addEventListener('click', () => {
   audio.collapse();
 });
 $('finish').addEventListener('click', () => {
-  if (locked || !game.finish()) return;
+  if (locked || countdown || !game.finish()) return;
   captions.cancel();
   selected = null;
   audio.cancelProbe();
@@ -998,7 +1047,10 @@ try {
     try {
       // 限界モードはメニューを開いても止めない（考える時間も持ち時間のうち）
       const paused = !limit && Boolean(document.querySelector('dialog[open]'));
-      if (!paused && game.status === 'playing') {
+      if (countdown) {
+        countdown = Math.max(0, countdown - dt);
+        updateCountdown();
+      } else if (!paused && game.status === 'playing') {
         handleMotion(game.advance(dt));
         if (game.status === 'playing') view.followAnalysis(game.result, game.sway);
         if (limit) updateTimer();
@@ -1030,6 +1082,7 @@ window.structureStudy = {
     mode: game.mode,
     day: roundDay,
     timeLeft: Number.isFinite(game.timeLeft) ? game.timeLeft : null,
+    elapsed: game.time,
     endReason: game.endReason,
     actions: game.actions.map((action) => ({ ...action })),
     motion: {
@@ -1046,6 +1099,7 @@ window.structureStudy = {
     coach: coach && { name: coach.name, step: coach.step ?? null },
     selectionCandidates: [...(view?.candidates ?? [])],
     locked,
+    countdown,
     stats: game.stats,
     probes: game.probes,
     members: game.structure.members.length,
