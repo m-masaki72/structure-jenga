@@ -2,7 +2,7 @@
 
 部材を叩いて音を聴き、一本ずつ抜いて構造を残す3Dパズルです。
 
-[ゲームを開く](https://m-masaki72.github.io/structure-jenga/)
+[ゲームを開く](https://structure-jenga.morilab-garage.com/)
 
 ## 遊び方
 

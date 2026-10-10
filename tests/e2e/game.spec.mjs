@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { replayRound } from '../../dist/js/structure-game.js';
 
-const canonical = 'https://m-masaki72.github.io/structure-jenga/';
+const canonical = 'https://structure-jenga.morilab-garage.com/';
 async function openGame(page) {
   await page.goto('/?seed=17');
   await expect
