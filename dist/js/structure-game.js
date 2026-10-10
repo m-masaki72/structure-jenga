@@ -1,3 +1,4 @@
+import { SAVE_KEY } from './storage-keys.js';
 import { prepareAnalysis } from './structure-solver.js';
 import { makeStructure } from './structure-levels.js';
 import { assembleRound, swayAt } from './structure-motion.js';
@@ -174,7 +175,7 @@ export class StructureGame {
   }
 }
 
-export const SAVE_KEY = 'structure-study-records-v3';
+export { SAVE_KEY };
 export function readRecords(storage) {
   try {
     const records = JSON.parse(storage.getItem(SAVE_KEY) ?? '{}');

@@ -37,9 +37,10 @@ export class StructureView {
     this.camera = new THREE.PerspectiveCamera(48, 1, 0.1, 1200);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.scratch = new THREE.Vector3();
-    // 先生が視点を動かしたあとは、リサイズでカメラを戻さない
+    // プレイヤーが視点を動かしたあとは、リサイズでカメラを戻さない。
+    // OrbitControls の start はクリックだけでも出るので、実際のドラッグ・ホイールで判定する
     this.cameraMoved = false;
-    this.controls.addEventListener('start', () => {
+    this.renderer.domElement.addEventListener('wheel', () => {
       this.cameraMoved = true;
     });
     this.controls.enableDamping = true;
@@ -373,6 +374,16 @@ export class StructureView {
   hit(clientX, clientY) {
     return this.candidatesAt(clientX, clientY)[0] ?? null;
   }
+  // 抜けない基礎部材をタップしたか（選べない理由を知らせるため）
+  foundationAt(clientX, clientY) {
+    const r = this.host.getBoundingClientRect();
+    const meshes = [...this.meshes.values()].filter((mesh) => !this.removed.has(mesh.userData.member.id));
+    this.ray.setFromCamera(
+      new THREE.Vector2(((clientX - r.x) / r.width) * 2 - 1, (-(clientY - r.y) / r.height) * 2 + 1),
+      this.camera,
+    );
+    return Boolean(this.ray.intersectObjects(meshes, false)[0]?.object.userData.member.foundation);
+  }
   candidatesAt(clientX, clientY, padding = 0) {
     const r = this.host.getBoundingClientRect();
     if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return [];
@@ -448,19 +459,21 @@ export class StructureView {
     const pointers = new Set();
     canvas.addEventListener('pointerdown', (e) => {
       pointers.add(e.pointerId);
+      if (pointers.size > 1) this.cameraMoved = true;
       if (pointers.size > 1 && this.down) this.down.moved = true;
       if (e.button === 0 && pointers.size === 1)
         this.down = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
     });
     canvas.addEventListener('pointermove', (e) => {
       if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 7)
-        this.down.moved = true;
+        this.down.moved = this.cameraMoved = true;
       if (e.pointerType !== 'touch' && !e.buttons) {
         // レイキャストは重いので 1 フレーム 1 回にまとめる
         const first = !this.hoverPoint;
         this.hoverPoint = [e.clientX, e.clientY];
         if (first)
           requestAnimationFrame(() => {
+            if (!this.hoverPoint) return;
             const [x, y] = this.hoverPoint;
             this.hoverPoint = null;
             this.hovered = this.interactive ? this.hit(x, y) : null;
@@ -474,6 +487,7 @@ export class StructureView {
       if (!this.down.moved && this.interactive) {
         const candidates = this.candidatesAt(e.clientX, e.clientY, e.pointerType === 'touch' ? 14 : 0);
         if (candidates.length) this.onSelect(candidates[0], candidates);
+        else if (this.foundationAt(e.clientX, e.clientY)) this.onFoundation?.();
       }
       this.down = null;
     });
@@ -482,6 +496,7 @@ export class StructureView {
       this.down = null;
     });
     canvas.addEventListener('pointerleave', () => {
+      this.hoverPoint = null;
       this.hovered = null;
     });
   }

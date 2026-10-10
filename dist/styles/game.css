@@ -939,6 +939,8 @@ dialog .eyebrow {
     white-space: nowrap;
   }
   .stage-title p {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .stage-title p {

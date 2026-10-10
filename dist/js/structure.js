@@ -5,14 +5,12 @@ import { StructureCaptions } from './structure-captions.js';
 import { CHAPTERS } from './structure-stages.js';
 import { StructureView } from './structure-view.js';
 import { StructureCollapse } from './structure-collapse.js';
+import { ARCHITECTURE_KEY, AUDIO_ENABLED_KEY, AUDIO_CAPTIONS_KEY, MUSIC_VOLUME_KEY } from './storage-keys.js';
 
 const $ = (id) => document.getElementById(id);
 const seedParam = new URLSearchParams(location.search).get('seed');
 const roundOptions =
   seedParam !== null && /^\d{1,10}$/.test(seedParam) ? { seed: Number(seedParam) >>> 0 } : {};
-const ARCHITECTURE_KEY = 'structure-selected-architecture-v1';
-const AUDIO_ENABLED_KEY = 'structure-audio-enabled-v1';
-const AUDIO_CAPTIONS_KEY = 'structure-audio-captions-v1';
 function restoredArchitecture() {
   try {
     const saved = localStorage.getItem(ARCHITECTURE_KEY);
@@ -25,7 +23,7 @@ const game = new StructureGame(restoredArchitecture(), roundOptions);
 const audio = new StructureAudio();
 const captions = new StructureCaptions();
 try {
-  const storedVolume = localStorage.getItem('structure-music-volume-v1');
+  const storedVolume = localStorage.getItem(MUSIC_VOLUME_KEY);
   if (storedVolume !== null) audio.setMusicVolume(Number(storedVolume));
   audio.enabled = localStorage.getItem(AUDIO_ENABLED_KEY) !== 'false';
   $('audio-captions').checked = localStorage.getItem(AUDIO_CAPTIONS_KEY) === 'true';
@@ -211,7 +209,9 @@ function update() {
             ? '次の一本に、耳をすます。'
             : game.structure.id === 'tetra'
               ? 'まずは足もとの、余分そうな一本を。'
-              : '柱も梁も、一本ずつ抜ける。';
+              : game.structure.chapter === CHAPTERS[0]
+                ? '柱も梁も、一本ずつ抜ける。'
+                : '柱も梁も一本ずつ。地面の部材は固定。';
 }
 
 function updateSetup() {
@@ -280,7 +280,7 @@ async function probe() {
     profile.grip > 0.4
       ? '短く乾いた音。荷重が掛かって、動きにくいような印象。'
       : '少し響きが残る音。小突くと遊びがあるような印象。';
-  if (!unlocked) announce('音を開始できません。設定から音の文字表示をONにできます。');
+  if (!unlocked) announce('音を開始できません。「アーキテクチャを選ぶ」から音の文字表示をONにできます。');
   else if (!audio.enabled) announce('音はOFFです。上部の音ボタンでONにできます。');
   else announce('');
   update();
@@ -456,7 +456,10 @@ $('deselect').addEventListener('click', () => {
 $('settings-open').addEventListener('click', openSetup);
 $('structure-open').addEventListener('click', openSetup);
 $('records-open').addEventListener('click', () => $('records-dialog').showModal());
-$('setup-apply').addEventListener('click', () => restart(setupLevel));
+$('setup-apply').addEventListener('click', () => {
+  if (game.status === 'playing' && game.history.length && !confirm('いまの挑戦をやめて始めますか？')) return;
+  restart(setupLevel);
+});
 $('result-open').addEventListener('click', showResult);
 $('restart').addEventListener('click', () => restart());
 for (const id of ['next-stage', 'result-next'])
@@ -494,7 +497,7 @@ $('audio-captions').addEventListener('change', () => {
 $('music-volume').addEventListener('input', () => {
   audio.setMusicVolume(Number($('music-volume').value) / 100);
   updateMusicLabel();
-  savePreference('structure-music-volume-v1', audio.musicVolume);
+  savePreference(MUSIC_VOLUME_KEY, audio.musicVolume);
 });
 $('members-toggle').addEventListener('click', () => {
   if (!view) return;
@@ -551,6 +554,7 @@ try {
       console.error(error);
     }
   });
+  view.onFoundation = () => announce('地面に据えた部材は、初級から抜けません。');
   view.load(game.structure, game.result);
   ready = true;
   $('loading').hidden = true;
