@@ -8,7 +8,7 @@ await StructureCollapse.init();
 function failedGame(level) {
   const game = new StructureGame(level, { seed: 17 });
   while (game.status === 'playing') {
-    game.remove(game.result.members.keys().next().value);
+    game.remove([...game.result.members.values()].find((m) => !m.foundation).id);
     game.advance(12);
   }
   const positions = game.structure.nodes.map((node, i) =>

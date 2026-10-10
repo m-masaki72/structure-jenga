@@ -216,11 +216,12 @@ export class StructureCollapse {
     this.scheduleFailure(structure, removedSet, analysis);
     // Shared pins and crossing bars must separate before contacts can act without adding artificial energy.
     const members = [...this.colliders.values()];
+    const ends = members.map(endpoints);
     for (let i = 0; i < members.length; i++)
       for (let j = i + 1; j < members.length; j++) {
         const a = members[i],
           b = members[j];
-        if (segmentDistance(...endpoints(a), ...endpoints(b)) < a.radius + b.radius + 0.006) {
+        if (segmentDistance(...ends[i], ...ends[j]) < a.radius + b.radius + 0.006) {
           this.overlaps.set(pairKey(a.collider.handle, b.collider.handle), [a, b]);
           const lo = Math.min(a.collider.handle, b.collider.handle);
           const hi = Math.max(a.collider.handle, b.collider.handle);
@@ -379,6 +380,8 @@ export class StructureCollapse {
       });
       this.accumulator -= STEP;
     }
+    // 低フレームレートで溜まった分は持ち越さず、次のフレームで早送りにならないようにする
+    if (steps === 4) this.accumulator = Math.min(this.accumulator, STEP);
   }
 
   snapshot() {

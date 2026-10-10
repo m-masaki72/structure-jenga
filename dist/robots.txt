@@ -1,3 +1,5 @@
+# GitHub Pages のプロジェクトサイト配下なので、クローラーはこのファイルを読まない。
+# サイトマップは Search Console から直接登録する。
 User-agent: *
 Allow: /
 Sitemap: https://m-masaki72.github.io/structure-jenga/sitemap.xml

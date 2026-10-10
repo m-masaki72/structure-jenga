@@ -117,16 +117,7 @@
               ><small class="count-target">/ <span id="target-count">3</span> 本</small></span
             ><span class="score-value"><strong id="score">0</strong><small>pt</small></span></span
           >
-          <span
-            class="target-track"
-            id="target-meter"
-            role="progressbar"
-            aria-label="抜く本数の目標"
-            aria-valuemin="0"
-            aria-valuemax="3"
-            aria-valuenow="0"
-            ><span id="target-bar"></span
-          ></span>
+          <span class="target-track" id="target-meter" aria-hidden="true"><span id="target-bar"></span></span>
         </button>
         <div class="stage-bottom">
           <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -220,10 +211,10 @@
         抜けた棒はすべて50点以上。荷重を受けていた棒には追加点。<br />完成させると、ボーナスが入ります。
       </p>
     </dialog>
-    <dialog id="help-dialog" class="help-dialog">
+    <dialog id="help-dialog" class="help-dialog" aria-labelledby="help-title">
       <button class="close-dialog" data-close="help-dialog" aria-label="遊び方を閉じる">×</button>
       <p class="eyebrow">A LITTLE GUIDE</p>
-      <h2>構造に、耳をすます。</h2>
+      <h2 id="help-title">構造に、耳をすます。</h2>
       <ol>
         <li>
           <b>一本を選んで、小突く。</b
@@ -254,7 +245,8 @@
       </p>
       <button class="primary wide" data-close="help-dialog">さあ、一本目を。</button>
     </dialog>
-    <dialog id="result-dialog" class="result-dialog">
+    <dialog id="result-dialog" class="result-dialog" aria-labelledby="result-title">
+      <button class="close-dialog" data-close="result-dialog" aria-label="結果を閉じる">×</button>
       <p class="eyebrow" id="result-eyebrow">LESS, AND STILL STANDING.</p>
       <h2 id="result-title">この余白が、あなたの作品。</h2>
       <p id="result-copy"></p>

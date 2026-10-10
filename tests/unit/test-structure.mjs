@@ -42,7 +42,9 @@ for (const level of CATALOG)
       const originalMass = game.initial.mass;
       let steps = 0;
       while (!game.stats.cleared && steps++ < game.structure.members.length) {
-        const candidates = [...game.result.members.values()].sort((a, b) => a.energy - b.energy);
+        const candidates = [...game.result.members.values()]
+          .filter((m) => !m.foundation)
+          .sort((a, b) => a.energy - b.energy);
         const candidate = candidates.find(
           (m) => analyze(game.structure, new Set([...game.removed, m.id]), 'quake').stable,
         );
@@ -63,7 +65,7 @@ for (const level of CATALOG)
       while (game.status === 'playing') {
         count = game.stats.count;
         score = game.stats.score;
-        game.remove(game.result.members.keys().next().value);
+        game.remove([...game.result.members.values()].find((m) => !m.foundation).id);
         game.advance(14);
         assert.equal(game.pending, null);
       }
@@ -318,4 +320,64 @@ test('motion is fixed-step and reset clears pending motion and completion', () =
   assert.equal(a.failure, null);
   assert.equal(a.time, 0);
   assert.equal(a.stats.count, 0);
+});
+
+test('readRecords drops malformed entries and non-object payloads', () => {
+  const data = new Map();
+  const storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+  data.set(
+    SAVE_KEY,
+    JSON.stringify({
+      ok: { score: 120, count: 2 },
+      negative: { score: -1, count: 2 },
+      fractional: { score: 10, count: 1.5 },
+      text: { score: '100', count: 1 },
+      empty: null,
+    }),
+  );
+  assert.deepEqual(Object.keys(readRecords(storage)), ['ok']);
+  data.set(SAVE_KEY, '[1,2]');
+  assert.deepEqual(readRecords(storage), {});
+  data.set(SAVE_KEY, 'null');
+  assert.deepEqual(readRecords(storage), {});
+});
+
+test('a collapsed round is saved without the failed member and never beats a better record', () => {
+  const data = new Map();
+  const storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+  const game = new StructureGame('spire', { seed: 17 });
+  while (game.status === 'playing') {
+    game.remove([...game.result.members.values()].find((m) => !m.foundation).id);
+    game.advance(8);
+  }
+  assert.equal(game.status, 'collapsed');
+  const first = saveRecord(storage, game);
+  assert.equal(first.saved, true);
+  assert.equal(first.best, true);
+  assert.equal(first.record.count, game.stats.count);
+  data.set(SAVE_KEY, JSON.stringify({ spire: { score: game.stats.score + 1, count: 9 } }));
+  assert.equal(saveRecord(storage, game).best, false);
+  assert.equal(readRecords(storage).spire.count, 9);
+});
+
+test('grounded members are locked outside the first chapter', () => {
+  for (const level of CATALOG) {
+    const structure = makeStructure(level.id);
+    const anchored = (node) => (Array.isArray(node.fixed) ? node.fixed.every(Boolean) : node.fixed === true);
+    for (const member of structure.members) {
+      const grounded = anchored(structure.nodes[member.a]) && anchored(structure.nodes[member.b]);
+      assert.equal(
+        Boolean(member.foundation),
+        grounded && level.chapter !== '入門',
+        `${level.id}/${member.id}`,
+      );
+    }
+  }
+  const game = new StructureGame('cube', { seed: 17 });
+  const footing = [...game.result.members.values()].find((m) => m.foundation);
+  assert.ok(footing, 'cube has grounded members');
+  assert.equal(game.remove(footing.id), null);
+  assert.equal(game.removed.size, 0);
+  const tutorial = new StructureGame('tetra', { seed: 17 });
+  assert.ok(![...tutorial.result.members.values()].some((m) => m.foundation));
 });

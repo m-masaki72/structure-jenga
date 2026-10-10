@@ -4,6 +4,9 @@ import { stoneFinish } from './structure-stone.js';
 import { surfaceNoise } from './structure-architecture.js';
 import { FOUNDATION } from './structure-profile.js';
 
+// タッチ端末は GPU が弱いことが多いので、草と影を軽くする
+const LITE = matchMedia('(pointer: coarse)').matches;
+
 function randomSource() {
   let seed = 104729;
   return () => {
@@ -43,7 +46,7 @@ export function makeLandscape(scene, renderer, reducedMotion) {
   sun.target.position.set(0, 1.5, 0);
   sun.position.copy(sunDirection).multiplyScalar(42).add(sun.target.position);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.setScalar(LITE ? 1024 : 2048);
   Object.assign(sun.shadow.camera, {
     left: -11,
     right: 11,
@@ -86,12 +89,6 @@ export function makeLandscape(scene, renderer, reducedMotion) {
 
   const concrete = new THREE.MeshStandardMaterial({ color: '#c1b18e', roughness: 0.94 });
   stoneFinish(concrete, true);
-  const finish = concrete.onBeforeCompile;
-  concrete.onBeforeCompile = (shader, renderer) => {
-    finish(shader, renderer);
-    shader.fragmentShader = shader.fragmentShader.replace('stone / 2.4', 'stone / 0.55');
-  };
-  concrete.customProgramCacheKey = () => 'structure-limestone-courtyard';
   const plinth = new THREE.Mesh(
     new THREE.BoxGeometry(FOUNDATION.halfSize * 2, FOUNDATION.halfHeight * 2, FOUNDATION.halfSize * 2),
     concrete,
@@ -151,7 +148,7 @@ export function makeLandscape(scene, renderer, reducedMotion) {
     );
   };
   grassMaterial.customProgramCacheKey = () => 'structure-grass-1';
-  const grass = new THREE.InstancedMesh(blade, grassMaterial, 16000);
+  const grass = new THREE.InstancedMesh(blade, grassMaterial, LITE ? 7000 : 16000);
   const transform = new THREE.Object3D();
   const grassColor = new THREE.Color();
   for (let i = 0; i < grass.count; i++) {

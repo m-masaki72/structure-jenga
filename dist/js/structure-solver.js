@@ -126,16 +126,22 @@ export function prepareAnalysis(structure, removed = new Set()) {
       if (node.force) for (let j = 0; j < 3; j++) force[j] += node.force[j];
       for (let j = 0; j < 3; j++) if (dofs[i][j] >= 0) rhs[dofs[i][j]] = force[j];
     });
-    const displacement = expand(solve(decomposition.lower, rhs));
-    const result = measure(displacement);
     const flat = solve(decomposition.lower, rhs);
-    let residual = 0;
-    for (let i = 0; i < size; i++) {
-      let value = -rhs[i];
-      for (let j = 0; j < size; j++) value += matrix[i * size + j] * flat[j];
-      residual = Math.max(residual, Math.abs(value));
-    }
-    return { ...result, residual };
+    const result = measure(expand(flat));
+    // 残差は検証用。毎ステップ O(n²) を払わないよう、読まれたときだけ計算する
+    Object.defineProperty(result, 'residual', {
+      enumerable: true,
+      get() {
+        let residual = 0;
+        for (let i = 0; i < size; i++) {
+          let value = -rhs[i];
+          for (let j = 0; j < size; j++) value += matrix[i * size + j] * flat[j];
+          residual = Math.max(residual, Math.abs(value));
+        }
+        return residual;
+      },
+    });
+    return result;
   };
   const measure = (displacement) => {
     let maxUtilization = 0,

@@ -37,7 +37,13 @@ export class StructureGame {
     return member;
   }
   remove(id) {
-    if (this.status !== 'playing' || this.pending || this.finishing || !this.result.members.has(id))
+    if (
+      this.status !== 'playing' ||
+      this.pending ||
+      this.finishing ||
+      !this.result.members.has(id) ||
+      this.result.members.get(id).foundation
+    )
       return null;
     const before = this.result;
     const member = before.members.get(id);
@@ -53,7 +59,7 @@ export class StructureGame {
     this.history.push(entry);
     this.pending = { entry, reward, before, until: this.time + 3.2 };
     if (after.reason === 'mechanism') this.fail(after);
-    else this.result = this.evaluate.measure(this.displacement);
+    else this.result = this.evaluate.measure(this.displacement.map((p) => [...p]));
     return { before, after: this.result, member, points: reward, meaningful };
   }
   fail(after) {

@@ -210,8 +210,8 @@ main {
   align-items: center;
   gap: 8px;
   margin-top: 4px;
-  font-size: 10px;
-  color: #7c8975;
+  font-size: 11px;
+  color: #52673f;
   letter-spacing: 0.8px;
 }
 .live-dot {
@@ -246,7 +246,7 @@ main {
   font-variant-numeric: tabular-nums;
 }
 .score-line small {
-  font-size: 10px;
+  font-size: 11px;
   margin-left: 6px;
   color: #7c8974;
 }
@@ -363,8 +363,8 @@ main {
 .selection-dock .deselect {
   border: 0;
   padding: 0;
-  width: 30px;
-  color: #809174;
+  width: 36px;
+  color: #52673f;
   font-size: 19px;
 }
 .selection-dock .candidate-picker {
@@ -380,7 +380,7 @@ main {
   color: #526b4d;
 }
 #candidate-position {
-  font-size: 9px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 button.primary {
@@ -452,7 +452,7 @@ button.primary:hover:not(:disabled) {
   position: absolute;
   left: 32px;
   bottom: 31px;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 1px;
   color: #3b4c3c;
   text-shadow: 0 1px 3px #f4f2e9;
@@ -468,7 +468,7 @@ button.primary:hover:not(:disabled) {
   padding: 10px;
   list-style: none;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
   color: #3b4c3c;
   background: #f4f2e9de;
   border-radius: 5px;
@@ -511,7 +511,7 @@ button.primary:hover:not(:disabled) {
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
-  font-size: 10px;
+  font-size: 11px;
 }
 #original-toggle[aria-pressed='true'],
 #members-toggle[aria-pressed='true'] {
@@ -547,12 +547,12 @@ dialog p {
   color: #78826d;
 }
 .eyebrow {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 1.7px;
 }
 dialog .eyebrow {
-  font-size: 9px;
+  font-size: 11px;
   color: #78906b;
 }
 .close-dialog {
@@ -641,8 +641,8 @@ dialog .eyebrow {
   border-color: #7f956e;
 }
 .exhibit-number {
-  font-size: 9px;
-  color: #8a987e;
+  font-size: 11px;
+  color: #52673f;
 }
 .exhibit strong {
   font-family: var(--serif);
@@ -652,7 +652,7 @@ dialog .eyebrow {
 }
 .exhibit small {
   display: block;
-  font-size: 9px;
+  font-size: 11px;
   color: #7d8b73;
   margin-top: 6px;
 }
@@ -677,7 +677,7 @@ dialog .eyebrow {
   justify-content: space-between;
   gap: 10px;
   color: #819076;
-  font-size: 10px;
+  font-size: 11px;
 }
 .small-heading h3 {
   font-size: 12px;
@@ -725,12 +725,12 @@ dialog .eyebrow {
 }
 .setup-note {
   text-align: center;
-  font-size: 10px;
+  font-size: 11px;
   margin: 8px 0 0;
 }
 .related-link {
-  font-size: 10px;
-  color: #89977e;
+  font-size: 11px;
+  color: #52673f;
   display: block;
   text-align: center;
 }
@@ -761,7 +761,7 @@ dialog .eyebrow {
   display: block;
 }
 .collection-meta span {
-  font-size: 10px;
+  font-size: 11px;
   color: #88967c;
   display: block;
   margin-top: 7px;
@@ -776,7 +776,7 @@ dialog .eyebrow {
 }
 .tray-empty {
   font-size: 11px;
-  color: #97a28b;
+  color: #52673f;
 }
 .tray-beam {
   width: 8px;
@@ -823,12 +823,12 @@ dialog .eyebrow {
 }
 .listening-guide small {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: #8b967e;
   margin-top: 11px;
 }
 .help-dialog .keyboard-guide {
-  font-size: 10px;
+  font-size: 11px;
   margin: 20px 0;
 }
 .result-dialog {
@@ -849,7 +849,7 @@ dialog .eyebrow {
   display: block;
 }
 .result-numbers span {
-  font-size: 9px;
+  font-size: 11px;
   color: #8c977c;
   display: block;
   margin-top: 7px;
@@ -864,7 +864,7 @@ dialog .eyebrow {
   font-size: 12px;
 }
 .result-dialog #save-status {
-  font-size: 10px;
+  font-size: 11px;
   margin-top: 7px;
 }
 @keyframes breathe {
@@ -907,7 +907,7 @@ dialog .eyebrow {
     position: absolute;
     top: 12px;
     right: 14px;
-    font-size: 10px;
+    font-size: 11px;
     padding: 9px;
     margin-right: 5px;
   }
@@ -942,7 +942,7 @@ dialog .eyebrow {
     white-space: nowrap;
   }
   .stage-title p {
-    font-size: 9px;
+    font-size: 11px;
     margin-top: 5px;
   }
   .score-summary {
@@ -962,7 +962,7 @@ dialog .eyebrow {
     font-size: 16px;
   }
   .score-line small {
-    font-size: 9px;
+    font-size: 11px;
     margin-left: 3px;
   }
   .score-line .count-target {
@@ -987,7 +987,7 @@ dialog .eyebrow {
     gap: 5px;
   }
   #selected-name {
-    font-size: 10px;
+    font-size: 11px;
   }
   #sound-wave {
     width: 26px;
@@ -1005,15 +1005,15 @@ dialog .eyebrow {
     margin-left: 7px;
   }
   .selection-dock .deselect {
-    width: 24px;
+    width: 32px;
     padding: 0;
   }
   .status {
-    font-size: 10px;
+    font-size: 11px;
   }
   .audio-description {
     max-width: 290px;
-    font-size: 10px;
+    font-size: 11px;
     padding: 7px 10px;
   }
   .settling {
@@ -1023,7 +1023,7 @@ dialog .eyebrow {
   .orbit-hint {
     bottom: 28px;
     left: 22px;
-    font-size: 8px;
+    font-size: 11px;
   }
   .view-menu {
     right: 13px;
@@ -1060,7 +1060,7 @@ dialog .eyebrow {
     height: 50px;
   }
   .exhibit small {
-    font-size: 8px;
+    font-size: 11px;
   }
   .result-numbers {
     padding: 20px 10px;
@@ -1081,10 +1081,10 @@ dialog .eyebrow {
     width: 22px;
   }
   .icon-button {
-    width: 28px;
+    width: 32px;
   }
   .finish-button {
-    font-size: 9px;
+    font-size: 11px;
     padding: 8px 6px;
     margin-right: 0;
   }

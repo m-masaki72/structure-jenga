@@ -36,6 +36,12 @@ export class StructureView {
     this.scene.fog = new THREE.Fog('#cbd8d9', 45, 190);
     this.camera = new THREE.PerspectiveCamera(48, 1, 0.1, 1200);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.scratch = new THREE.Vector3();
+    // 先生が視点を動かしたあとは、リサイズでカメラを戻さない
+    this.cameraMoved = false;
+    this.controls.addEventListener('start', () => {
+      this.cameraMoved = true;
+    });
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.1;
     this.controls.enablePan = false;
@@ -337,21 +343,26 @@ export class StructureView {
     this.controls.minDistance = distance * 0.58;
     this.controls.maxDistance = distance * 1.7;
     this.controls.update();
+    this.cameraMoved = false;
   }
   resize() {
     const { width, height } = this.host.getBoundingClientRect();
+    if (width < 1 || height < 1) return;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
     this.renderer.setSize(width, height, false);
-    this.camera.aspect = width / Math.max(1, height);
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.home();
+    if (!this.cameraMoved) this.home();
   }
   rotate(amount) {
+    this.cameraMoved = true;
     const offset = this.camera.position.clone().sub(this.controls.target);
     offset.applyAxisAngle(Y, amount);
     this.camera.position.copy(this.controls.target).add(offset);
     this.controls.update();
   }
   zoom(factor) {
+    this.cameraMoved = true;
     const offset = this.camera.position.clone().sub(this.controls.target);
     offset.setLength(
       THREE.MathUtils.clamp(offset.length() * factor, this.controls.minDistance, this.controls.maxDistance),
@@ -365,7 +376,9 @@ export class StructureView {
   candidatesAt(clientX, clientY, padding = 0) {
     const r = this.host.getBoundingClientRect();
     if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return [];
-    const meshes = [...this.meshes.values()].filter((mesh) => !this.removed.has(mesh.userData.member.id));
+    const meshes = [...this.meshes.values()].filter(
+      (mesh) => !mesh.userData.member.foundation && !this.removed.has(mesh.userData.member.id),
+    );
     const cast = (x, y) => {
       this.ray.setFromCamera(
         new THREE.Vector2(((x - r.x) / r.width) * 2 - 1, (-(y - r.y) / r.height) * 2 + 1),
@@ -443,8 +456,16 @@ export class StructureView {
       if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 7)
         this.down.moved = true;
       if (e.pointerType !== 'touch' && !e.buttons) {
-        this.hovered = this.interactive ? this.hit(e.clientX, e.clientY) : null;
-        canvas.style.cursor = this.hovered === null ? 'grab' : 'pointer';
+        // レイキャストは重いので 1 フレーム 1 回にまとめる
+        const first = !this.hoverPoint;
+        this.hoverPoint = [e.clientX, e.clientY];
+        if (first)
+          requestAnimationFrame(() => {
+            const [x, y] = this.hoverPoint;
+            this.hoverPoint = null;
+            this.hovered = this.interactive ? this.hit(x, y) : null;
+            canvas.style.cursor = this.hovered === null ? 'grab' : 'pointer';
+          });
       }
     });
     canvas.addEventListener('pointerup', (e) => {
@@ -470,7 +491,10 @@ export class StructureView {
       id === null
         ? []
         : [...new Set(candidates.includes(id) ? candidates : [id, ...candidates])].filter(
-            (candidate) => this.meshes.has(candidate) && !this.removed.has(candidate),
+            (candidate) =>
+              this.meshes.has(candidate) &&
+              !this.meshes.get(candidate).userData.member.foundation &&
+              !this.removed.has(candidate),
           );
   }
   cycleCandidate() {
@@ -630,7 +654,7 @@ export class StructureView {
       } else {
         const a = this.positions[member.a],
           b = this.positions[member.b];
-        const direction = b.clone().sub(a);
+        const direction = this.scratch.copy(b).sub(a);
         mesh.position.copy(a).add(b).multiplyScalar(0.5);
         mesh.scale.set(radius, direction.length(), radius);
         mesh.quaternion
@@ -681,6 +705,7 @@ export class StructureView {
         ? this.materials.column.color
         : (this.familyColors.get(mesh.userData.member.family) ?? this.materials.beam.color);
       const color = this.highlightColor.copy(baseColor);
+      if (mesh.userData.member.foundation) color.multiplyScalar(0.62);
       if (mesh.material === this.materials.selected) color.lerp(this.materials.selected.color, 0.24);
       else if (mesh.material === this.materials.hover && this.interactive)
         color.lerp(this.materials.hover.color, 0.28);

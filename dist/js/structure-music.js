@@ -1,3 +1,12 @@
+// 途中のランプを現在値で止める（cancelAndHoldAtTime がない Firefox では同等の処理で代替）
+export function holdAt(param, time) {
+  if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(time);
+  else {
+    param.cancelScheduledValues(time);
+    param.setValueAtTime(param.value, time);
+  }
+}
+
 const STEP = 60 / 76 / 2;
 const frequency = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
@@ -52,10 +61,10 @@ export class StructureMusic {
     clearInterval(this.timer);
     this.timer = null;
     const now = this.context.currentTime;
-    this.level.gain.cancelScheduledValues(now);
+    holdAt(this.level.gain, now);
     this.level.gain.setTargetAtTime(0, now, 0.025);
     for (const voice of this.voices) {
-      voice.gain.gain.cancelScheduledValues(now);
+      holdAt(voice.gain.gain, now);
       voice.gain.gain.setTargetAtTime(0.0001, now, 0.025);
       voice.carrier.stop(now + 0.14);
       voice.modulator.stop(now + 0.14);
@@ -70,7 +79,7 @@ export class StructureMusic {
   duck(duration = 0.8) {
     const now = this.context.currentTime;
     this.duckUntil = Math.max(this.duckUntil ?? 0, now + duration);
-    this.ducker.gain.cancelScheduledValues(now);
+    holdAt(this.ducker.gain, now);
     this.ducker.gain.setTargetAtTime(0.14, now, 0.008);
     this.ducker.gain.setTargetAtTime(1, this.duckUntil, 0.35);
   }
@@ -78,7 +87,7 @@ export class StructureMusic {
     if (!this.playing || this.context.state !== 'running') return;
     const now = this.context.currentTime;
     if (this.nextTime < now) this.nextTime = now + 0.03;
-    while (this.nextTime < now + 0.18) {
+    while (this.nextTime < now + 0.3) {
       this.schedule(this.index++, this.nextTime);
       this.nextTime += STEP;
     }

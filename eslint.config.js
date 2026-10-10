@@ -3,13 +3,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: [
-      'dist/vendor/**',
-      'dist/js/fold-net-data.js',
-      'node_modules/**',
-      'test-results/**',
-      'playwright-report/**',
-    ],
+    ignores: ['dist/vendor/**', 'node_modules/**', 'test-results/**', 'playwright-report/**'],
   },
   js.configs.recommended,
   {
@@ -17,7 +11,12 @@ export default [
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['tests/**/*.mjs', 'tools/**/*.mjs', 'eslint.config.js', 'playwright.config.mjs'],
+    files: ['tests/unit/**/*.mjs', 'tools/**/*.mjs', 'eslint.config.js', 'playwright.config.mjs'],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    // page.evaluate() のコールバックはブラウザで動く
+    files: ['tests/e2e/**/*.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
 ];

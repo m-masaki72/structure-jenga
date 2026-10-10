@@ -62,6 +62,7 @@ let view,
   locked = false,
   generation = 0,
   pulse = null,
+  collapsing = false,
   ready = false;
 let saveResult = null;
 let setupLevel = game.structure.id,
@@ -139,13 +140,10 @@ function update() {
     : `${game.structure.target} 本抜こう。余分な棒も、一本。`;
   $('target-progress').textContent = `${s.count} / ${game.structure.target}`;
   $('target-bar').style.width = `${Math.min(100, (s.count / game.structure.target) * 100)}%`;
-  $('target-meter').setAttribute('aria-valuemax', game.structure.target);
-  $('target-meter').setAttribute('aria-valuenow', Math.min(s.count, game.structure.target));
-  $('target-meter').setAttribute('aria-valuetext', `${s.count} 本 / 目標 ${game.structure.target} 本`);
   $('records-open').title = `${s.count} 本 / 目標 ${game.structure.target} 本 · 詳しい記録`;
   $('records-open').setAttribute(
     'aria-label',
-    `${s.count} 本 / 目標 ${game.structure.target} 本、${s.score}点。詳しい記録を見る`,
+    `${s.count} / ${game.structure.target} 本 ${s.score}pt、詳しい記録を見る`,
   );
   $('reduction').textContent = `${Math.round(s.reduction * 100)}%`;
   $('empty-count').textContent = `${s.empty} 本`;
@@ -163,6 +161,8 @@ function update() {
     $('beam-tray').innerHTML = '<span class="tray-empty">ここに、あなたの選択が並びます。</span>';
   const canAct = ready && !locked && game.status === 'playing';
   const member = selected === null ? null : game.result.members.get(selected);
+  for (const id of ['help-open', 'settings-open', 'structure-open', 'records-open', 'result-open'])
+    $(id).disabled = collapsing;
   $('selected-name').textContent = member ? memberName(selected) : '未選択';
   $('selected-kind').textContent = member
     ? view.meshes.get(selected)?.userData.profile.column
@@ -235,7 +235,8 @@ function openSetup() {
 }
 
 async function select(id, candidates = []) {
-  if (!ready || locked || game.status !== 'playing' || !game.result.members.has(id)) return;
+  const member = game.result.members.get(id);
+  if (!ready || locked || game.status !== 'playing' || !member || member.foundation) return;
   selected = id;
   $('sound-impression').textContent = '耳をすませて…';
   $('view-menu').open = false;
@@ -249,8 +250,7 @@ async function probe() {
   const token = generation,
     id = selected,
     attempt = captions.sequence;
-  const member = game.probe(id);
-  if (!member) return;
+  if (!game.result.members.has(id)) return;
   const unlocked = await audio.unlock();
   if (
     token !== generation ||
@@ -260,6 +260,8 @@ async function probe() {
     game.status !== 'playing'
   )
     return;
+  const member = game.probe(id);
+  if (!member) return;
   const target = view.targets().find((target) => target.id === id);
   const profile = audio.strike(
     member,
@@ -285,19 +287,15 @@ async function probe() {
 }
 async function extract() {
   if (selected === null || locked || game.status !== 'playing') return;
-  const id = selected,
-    token = generation;
-  locked = true;
+  const id = selected;
   captions.cancel();
-  update();
-  await audio.unlock();
-  if (token !== generation) return;
   const event = game.remove(id);
   if (!event) {
-    locked = false;
     update();
     return;
   }
+  locked = true;
+  void audio.unlock();
   selected = null;
   audio.cancelProbe();
   pulse = null;
@@ -322,10 +320,13 @@ async function onCollapse() {
   if (!view.failure) view.collapse(game.result);
   announce('');
   audio.collapse();
+  collapsing = true;
   update();
   await delay(view.reducedMotion ? 1400 : 5200);
   if (token !== generation) return;
+  collapsing = false;
   locked = false;
+  closeDialogs();
   showResult();
 }
 function handleMotion(events) {
@@ -349,14 +350,16 @@ function handleMotion(events) {
     }
   }
 }
+function closeDialogs() {
+  document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
+}
 function restart(level = game.structure.id) {
   if (!ready) return;
   generation++;
   captions.cancel();
   audio.cancelProbe();
-  $('result-dialog').close();
-  $('settings-dialog').close();
-  $('records-dialog').close();
+  closeDialogs();
+  collapsing = false;
   locked = false;
   selected = null;
   pulse = null;
@@ -373,6 +376,7 @@ function restart(level = game.structure.id) {
     announce('このブラウザでは、選んだアーキテクチャを保存できませんでした。');
   }
   update();
+  $('structure-viewport').focus({ preventScroll: true });
 }
 function showResult() {
   if (!saveResult) {
@@ -475,6 +479,7 @@ $('finish').addEventListener('click', () => {
   locked = true;
   announce('完成の前に、もうひと揺れ。');
   update();
+  $('structure-viewport').focus({ preventScroll: true });
 });
 $('sound-toggle').addEventListener('click', async () => {
   const enabled = audio.toggle();
@@ -513,16 +518,16 @@ document
 document.addEventListener('keydown', (event) => {
   if (!ready || event.target.matches('input,select,textarea') || document.querySelector('dialog[open]'))
     return;
-  if (event.code === 'KeyR' && !event.metaKey && !event.ctrlKey) {
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.code === 'KeyR') {
     event.preventDefault();
-    restart();
+    if (game.status !== 'playing' || !game.history.length || confirm('最初からやり直しますか？')) restart();
   }
   if (event.code === 'KeyM') $('sound-toggle').click();
   if (event.target !== $('structure-viewport')) return;
-  if (event.repeat) return;
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.code)) {
     event.preventDefault();
-    const ids = [...game.result.members.keys()];
+    const ids = [...game.result.members.values()].filter((m) => !m.foundation).map((m) => m.id);
     const index = ids.indexOf(selected);
     const offset = event.code === 'ArrowLeft' || event.code === 'ArrowUp' ? -1 : 1;
     if (ids.length) select(ids[(index + offset + ids.length) % ids.length]);
@@ -539,7 +544,13 @@ document.addEventListener('keydown', (event) => {
 
 try {
   await StructureCollapse.init();
-  view = new StructureView($('structure-viewport'), select, (impact) => audio.impact(impact));
+  view = new StructureView($('structure-viewport'), select, (impact) => {
+    try {
+      audio.impact(impact);
+    } catch (error) {
+      console.error(error);
+    }
+  });
   view.load(game.structure, game.result);
   ready = true;
   $('loading').hidden = true;
@@ -552,11 +563,19 @@ try {
     update();
     window.dispatchEvent(new Event('structure-render-error'));
   });
+  view.renderer.domElement.addEventListener('webglcontextrestored', () => {
+    ready = true;
+    $('loading').hidden = true;
+    update();
+    window.dispatchEvent(new Event('structure-render-restored'));
+  });
   let previousFrame = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, Math.max(0, (now - previousFrame) / 1000));
     previousFrame = now;
-    if (ready && !document.hidden) {
+    requestAnimationFrame(frame);
+    if (!ready || document.hidden) return;
+    try {
       const paused = Boolean(document.querySelector('dialog[open]'));
       if (!paused && game.status === 'playing') {
         handleMotion(game.advance(dt));
@@ -564,8 +583,14 @@ try {
       }
       view.frame(now / 1000);
       drawWave(now / 1000);
+    } catch (error) {
+      ready = false;
+      $('loading').textContent = '3D描画でエラーが起きました。ページを再読み込みしてください。';
+      $('loading').hidden = false;
+      update();
+      console.error(error);
+      window.dispatchEvent(new Event('structure-render-error'));
     }
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 } catch (error) {

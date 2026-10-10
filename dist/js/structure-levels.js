@@ -52,7 +52,20 @@ function withFootrails(structure) {
   return structure;
 }
 
+// 両端が地面に固定された部材は荷重を負担しないので、入門の章以外では抜けない基礎として扱う
+
+const anchored = (node) => (Array.isArray(node.fixed) ? node.fixed.every(Boolean) : node.fixed === true);
+
 export function makeStructure(id = 'spire') {
+  const structure = buildStructure(id);
+  if (structure.chapter !== CHAPTERS[0])
+    for (const member of structure.members)
+      if (anchored(structure.nodes[member.a]) && anchored(structure.nodes[member.b]))
+        member.foundation = true;
+  return structure;
+}
+
+function buildStructure(id) {
   const spec = CATALOG.find((level) => level.id === id) ?? CATALOG[0];
   const stage = makeNewStage(spec.id);
   if (stage) return { ...stage, ...spec };

@@ -1,4 +1,6 @@
-import { StructureMusic } from './structure-music.js';
+import { StructureMusic, holdAt } from './structure-music.js';
+
+const MAX_VOICES = 36;
 export { soundImpression } from './structure-captions.js';
 
 export function voiceProfile(member) {
@@ -42,8 +44,12 @@ export class StructureAudio {
         limiter.connect(c.destination);
         this.music = new StructureMusic(c, this.output, this.musicVolume);
         this.prepareRumble();
+        // 電話や他アプリで中断されたあと running に戻ったら音楽を再開する
+        c.addEventListener('statechange', () => this.updateMusic());
       }
-      if (this.context.state !== 'running') await this.context.resume();
+      if (this.context.state !== 'running')
+        // 一部のブラウザはジェスチャー外の resume を保留したままにするので、待ちすぎない
+        await Promise.race([this.context.resume(), new Promise((resolve) => setTimeout(resolve, 1500))]);
       this.updateMusic();
       return this.context.state === 'running';
     } catch {
@@ -91,7 +97,7 @@ export class StructureAudio {
   }
   knock(profile, pan) {
     const c = this.context;
-    if (!this.enabled || c?.state !== 'running' || this.voices > 36) return;
+    if (!this.enabled || c?.state !== 'running' || this.voices >= MAX_VOICES) return;
     if (!this.knockNoise) {
       this.knockNoise = c.createBuffer(1, Math.ceil(c.sampleRate * 0.09), c.sampleRate);
       const data = this.knockNoise.getChannelData(0);
@@ -128,7 +134,7 @@ export class StructureAudio {
   }
   tone(profile, pan = 0, delay = 0) {
     const c = this.context;
-    if (!this.enabled || c?.state !== 'running' || this.voices > 36) return;
+    if (!this.enabled || c?.state !== 'running' || this.voices >= MAX_VOICES) return;
     const start = c.currentTime + delay;
     const panner = c.createStereoPanner();
     panner.pan.value = Math.max(-0.8, Math.min(0.8, pan));
@@ -160,7 +166,7 @@ export class StructureAudio {
     });
     return () =>
       voices.forEach(({ osc, gain }) => {
-        gain.gain.cancelScheduledValues(c.currentTime);
+        holdAt(gain.gain, c.currentTime);
         gain.gain.setTargetAtTime(0.0001, c.currentTime, 0.008);
         osc.stop(c.currentTime + 0.04);
       });
@@ -195,7 +201,7 @@ export class StructureAudio {
     drive = false,
   }) {
     const c = this.context;
-    if (!this.enabled || !this.visible || !c || this.voices >= 36) return;
+    if (!this.enabled || !this.visible || !c || this.voices >= MAX_VOICES) return;
     const now = c.currentTime + delay;
     const source = noise ? c.createBufferSource() : c.createOscillator();
     const filter = c.createBiquadFilter();
@@ -242,7 +248,7 @@ export class StructureAudio {
     gain.connect(panner);
     panner.connect(this.output);
     const stop = () => {
-      gain.gain.cancelScheduledValues(c.currentTime);
+      holdAt(gain.gain, c.currentTime);
       gain.gain.setTargetAtTime(0.0001, c.currentTime, 0.008);
       source.stop(c.currentTime + 0.04);
     };
@@ -277,7 +283,7 @@ export class StructureAudio {
     if (!this.enabled || !this.visible || c?.state !== 'running') return;
     if (!this.ground) {
       this.prepareRumble();
-      if (this.voices >= 36) return;
+      if (this.voices >= MAX_VOICES) return;
       const source = c.createBufferSource(),
         low = c.createBiquadFilter(),
         high = c.createBiquadFilter(),
@@ -298,7 +304,7 @@ export class StructureAudio {
       const ground = { source, gain, strength: 0 };
       this.ground = ground;
       const stop = () => {
-        gain.gain.cancelScheduledValues(c.currentTime);
+        holdAt(gain.gain, c.currentTime);
         gain.gain.setTargetAtTime(0.0001, c.currentTime, 0.008);
         source.stop(c.currentTime + 0.04);
       };
@@ -316,7 +322,7 @@ export class StructureAudio {
     const now = c.currentTime;
     this.ground.strength = Math.max(strength, this.ground.strength * 0.85);
     const gain = this.ground.gain.gain;
-    gain.cancelAndHoldAtTime(now);
+    holdAt(gain, now);
     gain.setTargetAtTime(0.18 + this.ground.strength * 0.42, now, 0.04);
     gain.setTargetAtTime(0.0001, now + 0.22, 0.65);
     this.ground.source.stop(now + 4);
