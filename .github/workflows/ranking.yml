@@ -1,0 +1,31 @@
+name: verify ranking
+
+# 限界モードのランキングに届いたスコアを再現検証する。RANKING_URL / RANKING_TOKEN が未設定なら何もしない
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-ranking
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RANKING_URL: ${{ vars.RANKING_URL }}
+      RANKING_TOKEN: ${{ secrets.RANKING_TOKEN }}
+    steps:
+      - if: env.RANKING_URL != '' && env.RANKING_TOKEN != ''
+        uses: actions/checkout@v4
+      - if: env.RANKING_URL != '' && env.RANKING_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - if: env.RANKING_URL != '' && env.RANKING_TOKEN != ''
+        run: node tools/verify-scores.mjs

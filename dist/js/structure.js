@@ -1,16 +1,24 @@
 import { CATALOG, makeStructure } from './structure-levels.js';
-import { StructureGame, readRecords, saveRecord } from './structure-game.js';
+import { StructureGame, readRecords, saveRecord, recordKey, LIMIT_RULES } from './structure-game.js';
 import { StructureAudio } from './structure-audio.js';
 import { StructureCaptions } from './structure-captions.js';
 import { CHAPTERS } from './structure-stages.js';
 import { StructureView } from './structure-view.js';
 import { StructureCollapse } from './structure-collapse.js';
-import { ARCHITECTURE_KEY, AUDIO_ENABLED_KEY, AUDIO_CAPTIONS_KEY, MUSIC_VOLUME_KEY } from './storage-keys.js';
+import { dailySeed, jstDay } from './structure-motion.js';
+import { rankingEnabled, fetchBoard, submitScore } from './ranking.js';
+import {
+  ARCHITECTURE_KEY,
+  AUDIO_ENABLED_KEY,
+  AUDIO_CAPTIONS_KEY,
+  MUSIC_VOLUME_KEY,
+  MODE_KEY,
+  NICKNAME_KEY,
+} from './storage-keys.js';
 
 const $ = (id) => document.getElementById(id);
 const seedParam = new URLSearchParams(location.search).get('seed');
-const roundOptions =
-  seedParam !== null && /^\d{1,10}$/.test(seedParam) ? { seed: Number(seedParam) >>> 0 } : {};
+const fixedSeed = seedParam !== null && /^\d{1,10}$/.test(seedParam) ? Number(seedParam) >>> 0 : null;
 function restoredArchitecture() {
   try {
     const saved = localStorage.getItem(ARCHITECTURE_KEY);
@@ -19,7 +27,22 @@ function restoredArchitecture() {
     return 'tetra';
   }
 }
-const game = new StructureGame(restoredArchitecture(), roundOptions);
+function restoredMode() {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'limit' ? 'limit' : 'classic';
+  } catch {
+    return 'classic';
+  }
+}
+let mode = restoredMode(),
+  roundDay = jstDay();
+// 限界モードは日替わりの共通シード（?seed= があればそちらを優先。ただしランキングには送れない）
+function roundOptions(level) {
+  roundDay = jstDay();
+  if (mode === 'limit') return { mode, seed: fixedSeed ?? dailySeed(roundDay, level) };
+  return fixedSeed === null ? {} : { seed: fixedSeed };
+}
+const game = new StructureGame(restoredArchitecture(), roundOptions(restoredArchitecture()));
 const audio = new StructureAudio();
 const captions = new StructureCaptions();
 try {
@@ -65,7 +88,11 @@ let view,
 let saveResult = null;
 let setupLevel = game.structure.id,
   setupChapter = game.structure.chapter,
+  setupMode = mode,
   noticeTimer;
+let board = null,
+  boardTab = 'daily',
+  submitted = false;
 const wave = $('sound-wave').getContext('2d');
 const memberName = (id) => `B-${String(id + 1).padStart(3, '0')}`;
 const announce = (text) => {
@@ -128,14 +155,27 @@ function records() {
     return {};
   }
 }
+function updateTimer() {
+  const limit = game.mode === 'limit';
+  $('limit-timer').hidden = !limit;
+  $('records-open').classList.toggle('limit', limit);
+  if (!limit) return;
+  const left = game.timeLeft;
+  $('time-left').textContent = left.toFixed(1);
+  $('target-bar').style.width = `${(left / game.timeLimit) * 100}%`;
+  $('records-open').classList.toggle('urgent', game.status === 'playing' && left < 10);
+}
 function update() {
-  const s = game.stats;
+  const s = game.stats,
+    limit = game.mode === 'limit';
   $('removed-count').textContent = s.count;
   $('target-count').textContent = game.structure.target;
   $('score').textContent = s.score.toLocaleString();
-  $('target-label').textContent = s.cleared
-    ? '目標達成。さらに余白をつくる？'
-    : `${game.structure.target} 本抜こう。余分な棒も、一本。`;
+  $('target-label').textContent = limit
+    ? `${Math.round(game.timeLimit)} 秒で、限界まで。`
+    : s.cleared
+      ? '目標達成。さらに余白をつくる？'
+      : `${game.structure.target} 本抜こう。余分な棒も、一本。`;
   $('target-progress').textContent = `${s.count} / ${game.structure.target}`;
   $('target-bar').style.width = `${Math.min(100, (s.count / game.structure.target) * 100)}%`;
   $('records-open').title = `${s.count} 本 / 目標 ${game.structure.target} 本 · 詳しい記録`;
@@ -146,7 +186,10 @@ function update() {
   $('reduction').textContent = `${Math.round(s.reduction * 100)}%`;
   $('empty-count').textContent = `${s.empty} 本`;
   $('collection-count').textContent = `${s.count} pieces`;
-  $('best-score').textContent = records()[game.structure.id]?.score ?? '—';
+  $('best-score').textContent = records()[recordKey(game.structure.id, game.mode)]?.score ?? '—';
+  $('record-note').textContent = limit
+    ? `荷重を受けていた棒ほど高得点、ぎりぎりの一本は×${LIMIT_RULES.edgeMultiplier}。崩れると合計の${Math.round((1 - LIMIT_RULES.collapseKeep) * 100)}%を失います。`
+    : '抜けた棒はすべて50点以上。荷重を受けていた棒には追加点。完成させると、ボーナスが入ります。';
   $('beam-tray').replaceChildren();
   for (const entry of game.history) {
     const bar = document.createElement('span');
@@ -189,11 +232,12 @@ function update() {
   $('settling-label').textContent = game.finishing
     ? 'もうひと揺れ、持ちこたえたら。'
     : 'まだ、揺れが戻ってくるかも。';
-  $('session-label').textContent = '自重と、かすかな揺れ';
+  $('session-label').textContent = limit ? '限界モード · 揺れが強まっていく' : '自重と、かすかな揺れ';
   $('stage-number').textContent = `${game.structure.number} / ${CATALOG.length}`;
-  $('round-tag').textContent = `${game.structure.number} / ${game.structure.name}`;
+  $('round-tag').textContent =
+    `${game.structure.number} / ${game.structure.name}${limit ? ` · 限界モード ${roundDay}` : ''}`;
   $('stage-name').textContent = game.structure.name;
-  const canAdvance = game.status === 'finished' && s.cleared && Boolean(nextStage());
+  const canAdvance = !limit && game.status === 'finished' && s.cleared && Boolean(nextStage());
   $('next-stage').hidden = $('result-next').hidden = !canAdvance;
   if (canAdvance) $('result-next').textContent = `次へ · ${nextStage().name} →`;
   $('stage-hint').hidden = Boolean(member) || locked;
@@ -203,15 +247,18 @@ function update() {
       ? '少なくなっても、まだ立っている。'
       : game.status === 'collapsed'
         ? 'その一本が、境目だった。'
-        : s.cleared
-          ? '目標達成。もう一本か、ここで完成か。'
-          : game.probes
-            ? '次の一本に、耳をすます。'
-            : game.structure.id === 'tetra'
-              ? 'まずは足もとの、余分そうな一本を。'
-              : game.structure.chapter === CHAPTERS[0]
-                ? '柱も梁も、一本ずつ抜ける。'
-                : '柱も梁も一本ずつ。地面の部材は固定。';
+        : limit
+          ? '揺れは強まる。きわどい一本ほど高得点。'
+          : s.cleared
+            ? '目標達成。もう一本か、ここで完成か。'
+            : game.probes
+              ? '次の一本に、耳をすます。'
+              : game.structure.id === 'tetra'
+                ? 'まずは足もとの、余分そうな一本を。'
+                : game.structure.chapter === CHAPTERS[0]
+                  ? '柱も梁も、一本ずつ抜ける。'
+                  : '柱も梁も一本ずつ。地面の部材は固定。';
+  updateTimer();
 }
 
 function updateSetup() {
@@ -224,11 +271,16 @@ function updateSetup() {
     button.setAttribute('aria-pressed', String(button.dataset.level === setupLevel));
     button.hidden = CATALOG.find((level) => level.id === button.dataset.level).chapter !== setupChapter;
   });
-  $('setup-apply').textContent = `${CATALOG.find((level) => level.id === setupLevel).name} を始める ↗`;
+  document
+    .querySelectorAll('[data-mode]')
+    .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mode === setupMode)));
+  $('setup-apply').textContent =
+    `${CATALOG.find((level) => level.id === setupLevel).name} を${setupMode === 'limit' ? '限界モードで' : ''}始める ↗`;
 }
 function openSetup() {
   setupLevel = game.structure.id;
   setupChapter = game.structure.chapter;
+  setupMode = mode;
   updateSetup();
   $('settings-dialog').showModal();
   $('setup-content').scrollTop = 0;
@@ -337,15 +389,22 @@ function handleMotion(events) {
       locked = false;
       update();
       announce(
-        event.heldOn
-          ? `…踏ん張った。+${event.entry.points}点。`
-          : `${memberName(event.entry.id)}、持ちこたえた。+${event.entry.points}点。`,
+        event.entry.edge
+          ? `…ぎりぎり踏ん張った！ ×${LIMIT_RULES.edgeMultiplier} +${event.entry.points}点。`
+          : event.heldOn
+            ? `…踏ん張った。+${event.entry.points}点。`
+            : `${memberName(event.entry.id)}、持ちこたえた。+${event.entry.points}点。`,
       );
     } else if (event.type === 'recovered') {
       announce('…揺れが戻った。まだ、立っている。');
     } else if (event.type === 'finished') {
       locked = false;
+      captions.cancel();
+      audio.cancelProbe();
+      selected = null;
+      view.select(null);
       audio.success();
+      closeDialogs();
       showResult();
     }
   }
@@ -364,8 +423,10 @@ function restart(level = game.structure.id) {
   selected = null;
   pulse = null;
   saveResult = null;
+  submitted = false;
+  board = null;
   audio.cancelCollapse();
-  game.reset(level, roundOptions);
+  game.reset(level, roundOptions(level));
   view.load(game.structure, game.result);
   $('original-toggle').setAttribute('aria-pressed', 'false');
   $('audio-description').textContent = '';
@@ -387,12 +448,22 @@ function showResult() {
     }
   }
   const s = game.stats,
-    finished = game.status === 'finished';
-  $('result-eyebrow').textContent = finished ? 'LESS, AND STILL STANDING.' : 'EVERY FALL TELLS A STORY.';
+    finished = game.status === 'finished',
+    limit = game.mode === 'limit',
+    timeout = game.endReason === 'timeout';
+  $('result-eyebrow').textContent = limit
+    ? `LIMIT MODE · ${roundDay}`
+    : finished
+      ? 'LESS, AND STILL STANDING.'
+      : 'EVERY FALL TELLS A STORY.';
   $('result-title').textContent = finished
-    ? s.cleared
-      ? 'この余白が、あなたの作品。'
-      : '小さな余白も、ひとつの作品。'
+    ? limit
+      ? timeout
+        ? '時間いっぱい、立ち続けた。'
+        : 'ここが、いまの限界。'
+      : s.cleared
+        ? 'この余白が、あなたの作品。'
+        : '小さな余白も、ひとつの作品。'
     : 'その一本が、境目だった。';
   $('result-copy').textContent = finished
     ? `${game.structure.name}は、${s.count}本少なくなっても立っています。`
@@ -400,8 +471,16 @@ function showResult() {
   $('result-score').textContent = s.score.toLocaleString();
   $('result-count').textContent = `${s.count}本`;
   $('result-reduction').textContent = `${Math.round(s.reduction * 100)}%`;
-  $('result-detail').textContent =
-    `${s.count} / ${game.structure.target}本 · 荷重ボーナス ${s.useful}本${finished ? ` / 完成ボーナス +${s.finishBonus}` : ' / 崩壊した一本は加点されません'}`;
+  const lost = Math.round((1 - LIMIT_RULES.collapseKeep) * 100);
+  $('result-detail').textContent = limit
+    ? `荷重ボーナス ${s.useful}本 · ぎりぎり ${s.edge}本 / ${
+        !finished
+          ? `崩壊で合計の${lost}%を失いました`
+          : timeout
+            ? '時間切れ'
+            : `完成ボーナス +${s.finishBonus}（残り ${game.finishRemaining.toFixed(1)} 秒）`
+      }`
+    : `${s.count} / ${game.structure.target}本 · 荷重ボーナス ${s.useful}本${finished ? ` / 完成ボーナス +${s.finishBonus}` : ' / 崩壊した一本は加点されません'}`;
   $('save-status').textContent = !saveResult.saved
     ? '記録を保存できませんでした。この画面で結果を確認できます。'
     : saveResult.best
@@ -409,9 +488,125 @@ function showResult() {
       : 'このブラウザに自己ベストを保存しています。';
   $('result-view').textContent = finished ? '作品を見る' : '崩れたかたちを見る';
   $('result-replay').hidden = finished;
+  showRanking();
   update();
   $('result-dialog').showModal();
 }
+
+// ランキング（限界モードの結果画面）
+const canSubmit = () =>
+  game.mode === 'limit' &&
+  game.status !== 'playing' &&
+  game.actions.length > 0 &&
+  game.seed === dailySeed(roundDay, game.structure.id);
+function showRanking() {
+  const visible = rankingEnabled && game.mode === 'limit';
+  $('ranking').hidden = !visible;
+  if (!visible) return;
+  $('ranking-day').textContent = roundDay;
+  try {
+    $('ranking-name').value ||= localStorage.getItem(NICKNAME_KEY) ?? '';
+  } catch {
+    // 保存できない環境でも入力はできる
+  }
+  $('ranking-form').hidden = !canSubmit() || submitted;
+  if (!submitted)
+    $('ranking-status').textContent = canSubmit()
+      ? 'ニックネームを付けて送ると、検証のあと順位に載ります。'
+      : game.actions.length
+        ? '練習用のシードなので、送信できません。'
+        : '一本も抜いていないので、送信できません。';
+  if (!board) void loadBoard();
+  else renderBoard();
+}
+async function loadBoard() {
+  const token = generation;
+  $('ranking-list').replaceChildren();
+  $('ranking-mine').textContent = '読み込み中…';
+  try {
+    const result = await fetchBoard(game.structure.id, roundDay);
+    if (token !== generation) return;
+    board = result;
+  } catch (error) {
+    if (token !== generation) return;
+    $('ranking-mine').textContent = `ランキングを読み込めませんでした（${error.message}）。`;
+    return;
+  }
+  renderBoard();
+}
+const STATUS_LABEL = { pending: '検証待ち', verified: '掲載済み', rejected: '不採用' };
+function renderBoard() {
+  document
+    .querySelectorAll('[data-board]')
+    .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.board === boardTab)));
+  const rows = board?.[boardTab] ?? [];
+  const items = rows.map((row, index) => {
+    const item = document.createElement('li');
+    const rank = document.createElement('span'),
+      name = document.createElement('span'),
+      score = document.createElement('b');
+    rank.textContent = index + 1;
+    name.textContent = boardTab === 'allTime' ? `${row.name} · ${row.day}` : row.name;
+    score.textContent = row.score.toLocaleString();
+    item.append(rank, name, score);
+    return item;
+  });
+  if (!items.length) {
+    const empty = document.createElement('li');
+    empty.className = 'empty';
+    empty.textContent = 'まだ掲載された記録はありません。';
+    items.push(empty);
+  }
+  $('ranking-list').replaceChildren(...items);
+  $('ranking-mine').textContent = board?.mine?.length
+    ? `自分の送信：${board.mine.map((row) => `${(row.score ?? row.claimed).toLocaleString()}pt ${STATUS_LABEL[row.status] ?? row.status}`).join(' / ')}`
+    : '';
+}
+async function sendScore(event) {
+  event.preventDefault();
+  if (submitted || !canSubmit()) return;
+  const name = $('ranking-name').value.trim();
+  if (!name) return;
+  const token = generation;
+  submitted = true;
+  $('ranking-submit').disabled = true;
+  $('ranking-status').textContent = '送信中…';
+  savePreference(NICKNAME_KEY, name);
+  try {
+    await submitScore({
+      level: game.structure.id,
+      day: roundDay,
+      seed: game.seed,
+      actions: game.actions,
+      score: game.stats.score,
+      name,
+    });
+    if (token !== generation) return;
+    $('ranking-form').hidden = true;
+    $('ranking-status').textContent = '送りました。リプレイ検証（10分ごと）が済むと順位に載ります。';
+    board = null;
+    await loadBoard();
+  } catch (error) {
+    if (token !== generation) return;
+    submitted = false;
+    $('ranking-status').textContent = `送信できませんでした（${error.message}）。`;
+  } finally {
+    $('ranking-submit').disabled = false;
+  }
+}
+$('ranking-form').addEventListener('submit', sendScore);
+document.querySelectorAll('[data-board]').forEach((button) =>
+  button.addEventListener('click', () => {
+    boardTab = button.dataset.board;
+    renderBoard();
+  }),
+);
+document.querySelectorAll('[data-mode]').forEach((button) =>
+  button.addEventListener('click', () => {
+    setupMode = button.dataset.mode;
+    updateSetup();
+  }),
+);
 function drawWave(time) {
   const width = wave.canvas.width,
     height = wave.canvas.height;
@@ -458,6 +653,8 @@ $('structure-open').addEventListener('click', openSetup);
 $('records-open').addEventListener('click', () => $('records-dialog').showModal());
 $('setup-apply').addEventListener('click', () => {
   if (game.status === 'playing' && game.history.length && !confirm('いまの挑戦をやめて始めますか？')) return;
+  mode = setupMode;
+  savePreference(MODE_KEY, mode);
   restart(setupLevel);
 });
 $('result-open').addEventListener('click', showResult);
@@ -576,15 +773,19 @@ try {
   });
   let previousFrame = performance.now();
   function frame(now) {
-    const dt = Math.min(0.05, Math.max(0, (now - previousFrame) / 1000));
+    const limit = game.mode === 'limit';
+    // 限界モードは遅い端末でも持ち時間が実時間に近くなるよう、1フレームの上限を広げる
+    const dt = Math.min(limit ? 0.1 : 0.05, Math.max(0, (now - previousFrame) / 1000));
     previousFrame = now;
     requestAnimationFrame(frame);
     if (!ready || document.hidden) return;
     try {
-      const paused = Boolean(document.querySelector('dialog[open]'));
+      // 限界モードはメニューを開いても止めない（考える時間も持ち時間のうち）
+      const paused = !limit && Boolean(document.querySelector('dialog[open]'));
       if (!paused && game.status === 'playing') {
         handleMotion(game.advance(dt));
         if (game.status === 'playing') view.followAnalysis(game.result, game.sway);
+        if (limit) updateTimer();
       }
       view.frame(now / 1000);
       drawWave(now / 1000);
@@ -610,6 +811,11 @@ window.structureStudy = {
     ready,
     level: game.structure.id,
     seed: game.seed,
+    mode: game.mode,
+    day: roundDay,
+    timeLeft: Number.isFinite(game.timeLeft) ? game.timeLeft : null,
+    endReason: game.endReason,
+    actions: game.actions.map((action) => ({ ...action })),
     motion: {
       time: game.time,
       sway: [...game.sway],

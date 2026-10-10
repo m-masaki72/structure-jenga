@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { replayRound } from '../../dist/js/structure-game.js';
 
 const canonical = 'https://m-masaki72.github.io/structure-jenga/';
 async function openGame(page) {
@@ -141,4 +142,90 @@ test('architecture and audio preferences survive a fresh page', async ({ page, c
   await openGame(reopened);
   expect(await reopened.evaluate(() => window.structureStudy.snapshot().level)).toBe('cube');
   await expect(reopened.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('limit mode runs a daily round through dialogs and submits it to the ranking', async ({ page }) => {
+  test.setTimeout(150000);
+  const endpoint = 'https://ranking.test';
+  const posted = [];
+  // ランキング Worker の URL を差し込み、Worker 自体はモックする
+  await page.route('**/index.html', async (route) => {
+    const response = await route.fetch();
+    const html = (await response.text()).replace(
+      '<meta name="ranking-endpoint" content="" />',
+      `<meta name="ranking-endpoint" content="${endpoint}" />`,
+    );
+    await route.fulfill({ response, body: html });
+  });
+  await page.route(`${endpoint}/**`, async (route) => {
+    const request = route.request();
+    if (request.method() === 'POST') posted.push(request.postDataJSON());
+    await route.fulfill({
+      status: request.method() === 'POST' ? 201 : 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(
+        request.method() === 'POST'
+          ? { id: 1, status: 'pending' }
+          : {
+              daily: [{ name: '<b>ちな</b>', score: 1234, day: '2026-10-10' }],
+              allTime: [],
+              mine: posted.length ? [{ claimed: posted[0].score, score: null, status: 'pending' }] : [],
+            },
+      ),
+    });
+  });
+  await page.goto('/index.html');
+  await expect
+    .poll(() => page.evaluate(() => window.structureStudy?.snapshot().ready), { timeout: 30000 })
+    .toBe(true);
+  await page.locator('#settings-open').click();
+  await page.locator('[data-mode="limit"]').click();
+  await page.locator('#setup-apply').click();
+  const snapshot = () => page.evaluate(() => window.structureStudy.snapshot());
+  expect((await snapshot()).mode).toBe('limit');
+  await expect(page.locator('#limit-timer')).toBeVisible();
+
+  // 限界モードはダイアログを開いても時間が進む
+  const before = (await snapshot()).timeLeft;
+  await page.locator('#help-open').click();
+  await expect.poll(async () => (await snapshot()).timeLeft, { timeout: 15000 }).toBeLessThan(before - 1);
+  await page.locator('#help-dialog [data-close]').first().click();
+
+  const viewport = page.locator('#structure-viewport');
+  await viewport.focus();
+  await viewport.press('ArrowRight');
+  await viewport.press('x');
+  await expect.poll(async () => (await snapshot()).actions.length).toBe(1);
+  await expect
+    .poll(
+      async () => {
+        const { motion, status } = await snapshot();
+        return status !== 'playing' || !motion.pending;
+      },
+      { timeout: 30000 },
+    )
+    .toBe(true);
+  if ((await snapshot()).status === 'playing') await page.locator('#finish').click();
+  // 完成でも崩壊でも時間切れでも、結果画面とランキングが出る
+  await expect(page.locator('#result-dialog')).toBeVisible({ timeout: 60000 });
+  await expect(page.locator('#ranking')).toBeVisible();
+  await expect(page.locator('#ranking-list li').first()).toContainText('<b>ちな</b>');
+  await page.locator('#ranking-name').fill('テスト');
+  await page.locator('#ranking-submit').click();
+  await expect(page.locator('#ranking-status')).toContainText('送りました');
+  await expect(page.locator('#ranking-mine')).toContainText('検証待ち');
+  const state = await snapshot();
+  expect(posted).toHaveLength(1);
+  expect(posted[0]).toMatchObject({
+    level: state.level,
+    day: state.day,
+    seed: state.seed,
+    score: state.stats.score,
+    actions: state.actions,
+    name: 'テスト',
+  });
+  expect(posted[0].player).toMatch(/^[0-9a-f-]{36}$/);
+  // ブラウザで遊んだ操作列を、検証側と同じ replayRound で再現すると同じ点になる
+  expect(replayRound(state.level, state.seed, 'limit', state.actions).stats.score).toBe(state.stats.score);
 });

@@ -34,6 +34,7 @@ Logic layer (pure, no DOM/Three — unit-tested in Node by importing from `dist/
 - `structure-levels.js` (`CATALOG`, `makeStructure(id)`) assembles levels from `structure-stages.js` (stage order, chapters, hand-built stages) and `structure-geometry.js` (parametric shells/hyperboloids).
 - Members whose both ends are fully fixed carry no load; `makeStructure` marks them `foundation: true` outside the first chapter (`入門`), and they cannot be selected or removed. Changing stages can make `target` unreachable — the unit test `attainable target` checks this.
 - `structure-game.js` — `StructureGame` state machine (probe/remove, scoring by member energy share, pending-removal grace window, sway via `structure-motion.js` seeded RNG) and localStorage records. All storage keys live in `storage-keys.js` (`SAVE_KEY` is versioned; bump it if the record format changes — the "clear saved data" button uses `GAME_KEYS` from the same file).
+- Limit mode (`mode: 'limit'`, rules in `LIMIT_RULES`): time limit, growing sway, uncapped scoring. Every removal/finish is logged in `game.actions` as `{ step, id }` / `{ step, finish }` and `replayRound()` must reproduce the score bit-exactly — keep all scoring/motion driven by fixed `STEP` advances and the seeded RNG, never wall-clock or `Math.random` inside a round. Limit rounds use `dailySeed(jstDay(), level)` from `structure-motion.js`.
 - `structure-captions.js` / `structure-audio.js` / `structure-music.js` — sound impression text and Web Audio synthesis from member profiles.
 
 Rendering layer (Three.js / Rapier):
@@ -45,4 +46,4 @@ The physics is a game approximation, not a real structural safety check.
 
 ## Deployment
 
-`.github/workflows/check.yml`: on pushes to `main` and on PRs runs `npm run verify` and E2E; on `main` it deploys `dist/` + `LICENSE` to GitHub Pages. If the public URL changes, update the URLs/share links in `dist/index.html`, plus `dist/sitemap.xml`, `robots.txt`, `404.html`.
+`.github/workflows/check.yml`: on pushes to `main` and on PRs runs `npm run verify` and E2E; on `main` it deploys `dist/` + `LICENSE` to GitHub Pages. Online ranking (optional): `ranking/src/index.js` is a Cloudflare Worker + D1 (`ranking/schema.sql`) that imports game logic from `dist/js/`; it only stores submissions as `pending`. `.github/workflows/ranking.yml` runs `tools/verify-scores.mjs` every 10 min, replaying each submission with `replayRound` and posting verdicts; boards show only `verified` rows. The client (`dist/js/ranking.js`) is disabled while `<meta name="ranking-endpoint">` in `dist/index.html` is empty. Setup steps are in the README. If the public URL changes, update the URLs/share links in `dist/index.html`, plus `dist/sitemap.xml`, `robots.txt`, `404.html`.

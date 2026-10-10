@@ -8,6 +8,8 @@
     <title>LESS, STILL. — 構造分解</title>
 
     <link rel="stylesheet" href="./styles/game.css" />
+    <!-- 限界モードのランキング Worker の URL（ranking/ をデプロイしたら設定する。空ならランキングは隠す） -->
+    <meta name="ranking-endpoint" content="" />
     <script type="importmap">
       { "imports": { "three": "./vendor/three.module.js" } }
     </script>
@@ -118,6 +120,7 @@
             ><span class="score-value"><strong id="score">0</strong><small>pt</small></span></span
           >
           <span class="target-track" id="target-meter" aria-hidden="true"><span id="target-bar"></span></span>
+          <span id="limit-timer" class="limit-timer" hidden>残り <b id="time-left">0.0</b> 秒</span>
         </button>
         <div class="stage-bottom">
           <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -173,6 +176,14 @@
       <div id="setup-content" class="setup-content">
         <p class="eyebrow">CHOOSE YOUR STRUCTURE</p>
         <h2 id="settings-title">アーキテクチャを選ぶ</h2>
+        <div class="mode-picker" role="group" aria-label="ルール">
+          <button data-mode="classic" aria-pressed="true">
+            <strong>ふつう</strong><small>時間無制限。じっくり聴いて抜く</small>
+          </button>
+          <button data-mode="limit" aria-pressed="false">
+            <strong>限界モード</strong><small>制限時間つき・揺れが強まる・日替わりランキング</small>
+          </button>
+        </div>
         <nav id="stage-chapters" class="stage-chapters" aria-label="難易度で選ぶ"></nav>
         <section class="exhibits" aria-label="構造を選ぶ" id="level-picker"></section>
         <p class="assembly-note">同じかたちでも、組み付けと揺れは毎回少しずつ違います。</p>
@@ -207,7 +218,7 @@
         <span id="collection-count">0 pieces</span>
       </div>
       <div id="beam-tray" aria-label="取り出した部材の記録"></div>
-      <p class="record-note">
+      <p id="record-note" class="record-note">
         抜けた棒はすべて50点以上。荷重を受けていた棒には追加点。<br />完成させると、ボーナスが入ります。
       </p>
     </dialog>
@@ -239,6 +250,13 @@
       <p>
         自重を中心に、強弱のある小さな揺れが続きます。組み付けの微妙なズレも毎回変わるので、同じ一本でも手応えは少し違います。メニューや遊び方を開いている間は、一時停止します。
       </p>
+      <div class="listening-guide">
+        <h3>限界モード</h3>
+        <p>
+          持ち時間は目標本数×6秒。揺れは時間とともに強まります。荷重を多く受けていた棒ほど高得点、ぎりぎりで踏ん張った一本は×1.2。崩れたら合計の30%を失い、早めに「ここで完成」すると残り時間に応じたボーナス。組み付けと揺れは日替わりで全員共通です。
+        </p>
+        <small>限界モードは、メニューを開いても止まりません。</small>
+      </div>
       <p class="keyboard-guide">
         ドラッグ：回転 / スクロール：ズーム<br />矢印キー：部材選択 / Space：聴く / X：抜く / R：再挑戦 /
         M：音
@@ -257,6 +275,26 @@
       </div>
       <p id="result-detail"></p>
       <p id="save-status"></p>
+      <section id="ranking" class="ranking" aria-labelledby="ranking-title" hidden>
+        <h3 id="ranking-title">ランキング <small id="ranking-day"></small></h3>
+        <form id="ranking-form" class="ranking-form">
+          <input
+            id="ranking-name"
+            maxlength="12"
+            autocomplete="nickname"
+            placeholder="ニックネーム（12文字まで）"
+            aria-label="ニックネーム"
+            required
+          /><button id="ranking-submit" class="primary">スコアを送る</button>
+        </form>
+        <p id="ranking-status" class="ranking-status" role="status"></p>
+        <div class="ranking-tabs" role="group" aria-label="ランキングの期間">
+          <button data-board="daily" aria-pressed="true">今日</button
+          ><button data-board="allTime" aria-pressed="false">歴代</button>
+        </div>
+        <ol id="ranking-list" class="ranking-list"></ol>
+        <p id="ranking-mine" class="ranking-mine"></p>
+      </section>
       <div class="result-actions">
         <button id="result-next" class="primary" hidden>次のステージへ →</button>
         <button id="result-retry" class="primary">もう一度、挑戦する ↗</button

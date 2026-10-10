@@ -1,0 +1,11 @@
+name = "structure-jenga-ranking"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "structure-jenga-ranking"
+# npx wrangler d1 create structure-jenga-ranking の出力にある database_id に置き換える
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# 検証用トークンは npx wrangler secret put VERIFY_TOKEN で登録する（ここには書かない）

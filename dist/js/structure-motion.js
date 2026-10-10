@@ -9,6 +9,14 @@ export function randomSequence(seed) {
   };
 }
 
+// 限界モードは日本時間の日付ごとに、全員が同じ組み付けと揺れで競う
+export const jstDay = (time = Date.now()) => new Date(time + 9 * 3600e3).toISOString().slice(0, 10);
+export function dailySeed(day, level) {
+  let hash = 0x811c9dc5;
+  for (const char of `${day}:${level}`) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193);
+  return hash >>> 0;
+}
+
 export function assembleRound(structure, seed) {
   const random = randomSequence(seed);
   const environment = {

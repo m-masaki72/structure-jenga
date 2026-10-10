@@ -4,6 +4,9 @@ export const ARCHITECTURE_KEY = 'structure-selected-architecture-v1';
 export const AUDIO_ENABLED_KEY = 'structure-audio-enabled-v1';
 export const AUDIO_CAPTIONS_KEY = 'structure-audio-captions-v1';
 export const MUSIC_VOLUME_KEY = 'structure-music-volume-v1';
+export const MODE_KEY = 'structure-jenga-mode-v1';
+export const PLAYER_KEY = 'structure-jenga-player-v1';
+export const NICKNAME_KEY = 'structure-jenga-nickname-v1';
 export const RESET_KEY = 'structure-jenga-reset-v1';
 export const GAME_KEYS = [
   SAVE_KEY,
@@ -11,4 +14,7 @@ export const GAME_KEYS = [
   AUDIO_ENABLED_KEY,
   AUDIO_CAPTIONS_KEY,
   MUSIC_VOLUME_KEY,
+  MODE_KEY,
+  PLAYER_KEY,
+  NICKNAME_KEY,
 ];

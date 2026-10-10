@@ -867,6 +867,142 @@ dialog .eyebrow {
   font-size: 11px;
   margin-top: 7px;
 }
+.limit-timer {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #6f8161;
+  text-align: right;
+}
+.limit-timer b {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.score-summary.limit .target-track > span {
+  transition: none;
+  background: #9a8a52;
+}
+.score-summary.urgent .target-track > span {
+  background: var(--orange);
+}
+.score-summary.urgent .limit-timer {
+  color: var(--orange);
+  animation: breathe 1s infinite;
+}
+.mode-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+.mode-picker button {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.mode-picker strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.mode-picker small {
+  font-size: 10px;
+  color: #7c8974;
+}
+.mode-picker [aria-pressed='true'] {
+  background: #29443c;
+  color: #f4f2e9;
+}
+.mode-picker [aria-pressed='true'] small {
+  color: #c9d3bd;
+}
+.ranking {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.ranking h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ranking h3 small {
+  font-weight: 400;
+  color: #8c977c;
+  margin-left: 6px;
+}
+.ranking-form {
+  display: flex;
+  gap: 6px;
+}
+.ranking-form[hidden] {
+  display: none;
+}
+.ranking-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fffdf6;
+  color: inherit;
+}
+.ranking-form button {
+  padding: 9px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ranking-status,
+.ranking-mine {
+  font-size: 11px;
+  color: #6f8161;
+  margin: 8px 0;
+}
+.ranking-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 6px;
+}
+.ranking-tabs button {
+  padding: 5px 14px;
+  font-size: 11px;
+}
+.ranking-tabs [aria-pressed='true'] {
+  background: #29443c;
+  color: #f4f2e9;
+}
+.ranking-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.ranking-list li {
+  display: grid;
+  grid-template-columns: 2em 1fr auto;
+  gap: 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid #e4e8dc;
+}
+.ranking-list li.empty {
+  display: block;
+  color: #8c977c;
+}
+.ranking-list li span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ranking-list b {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
 @keyframes breathe {
   50% {
     opacity: 0.3;

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node tools/serve.mjs 8770",
     "check": "node tools/check-syntax.mjs",
-    "lint": "eslint dist/js tests tools eslint.config.js playwright.config.mjs",
+    "lint": "eslint dist/js ranking/src tests tools eslint.config.js playwright.config.mjs",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "test": "node --test tests/unit/*.mjs",

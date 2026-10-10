@@ -19,4 +19,9 @@ export default [
     files: ['tests/e2e/**/*.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
+  {
+    // Cloudflare Workers は fetch / Request / Response などを持つ
+    files: ['ranking/src/**/*.js'],
+    languageOptions: { globals: { ...globals.serviceworker, console: 'readonly' } },
+  },
 ];
