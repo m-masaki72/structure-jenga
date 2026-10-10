@@ -728,12 +728,6 @@ dialog .eyebrow {
   font-size: 11px;
   margin: 8px 0 0;
 }
-.related-link {
-  font-size: 11px;
-  color: #52673f;
-  display: block;
-  text-align: center;
-}
 .records-dialog {
   width: 440px;
 }

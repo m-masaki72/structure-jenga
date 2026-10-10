@@ -48,7 +48,7 @@ E2EはChromiumのソフトウェア描画を使います。Safariと実機の音
 ## 公開
 
 GitHub PagesのSourceを **GitHub Actions** にします。`main`へのpushでテストが成功すると公開します。
-公開するのは`dist/`とライセンスだけです。外部API・APIキー・専用サーバーは不要です。
+公開するのは`dist/`とライセンスだけです。ゲーム本体はAPIキーや専用サーバーなしで動きます（ランキングだけ下記のWorkerを使います）。
 favicon・OGP・JSON-LD・サイトマップ・404ページを同梱しています。
 公開先を変える場合は`dist/index.html`の公開URL・共有リンクと`dist/sitemap.xml`・`robots.txt`・`404.html`を更新してください。
 
@@ -69,6 +69,10 @@ favicon・OGP・JSON-LD・サイトマップ・404ページを同梱していま
 4. `npx wrangler secret put VERIFY_TOKEN`。長いランダム文字列を入力する
 5. `npx wrangler deploy`。表示されたURLを`dist/index.html`の`ranking-endpoint`に書く
 6. GitHubのリポジトリ設定で、Variables `RANKING_URL`にWorkerのURL、Secrets `RANKING_TOKEN`に手順4の文字列を登録する
+
+不適切な名前の記録を消すとき（`ranking/`で実行。`NAME`を消したい名前に置き換える）：
+
+`npx wrangler d1 execute structure-jenga-ranking --remote --command "DELETE FROM scores WHERE name = 'NAME'"`
 
 ## コード
 
